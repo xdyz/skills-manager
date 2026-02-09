@@ -1,9 +1,7 @@
-import React from "react";
-import { createHashRouter } from "react-router-dom";
-import PageLayout from "../pages/layout";
-import HomePage from "../pages/home";
-import SkillsPage from "../pages/skills";
-
+import { createHashRouter } from "react-router-dom"
+import PageLayout from "../pages/layout"
+import HomePage from "../pages/home"
+import SkillsPage from "../pages/skills"
 
 const routes = createHashRouter([
   {
