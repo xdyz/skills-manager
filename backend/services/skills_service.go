@@ -259,6 +259,21 @@ func (ss *SkillsService) Startup(ctx context.Context) {
 	ss.ctx = ctx
 }
 
+// shellRun 通过用户的 login shell 执行命令，确保 GUI 应用能继承完整的 shell 环境（PATH 等）
+// macOS GUI 应用不会加载 .zshrc/.bash_profile，直接 exec.Command 找不到 nvm/homebrew 安装的命令
+func shellRun(command string) ([]byte, error) {
+	return exec.Command("/bin/zsh", "-l", "-c", command).CombinedOutput()
+}
+
+// shellOutput 通过 login shell 执行命令并返回 stdout
+func shellOutput(command string) (string, error) {
+	out, err := exec.Command("/bin/zsh", "-l", "-c", command).Output()
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
 // EnvStatus 环境依赖状态
 type EnvStatus struct {
 	NpxInstalled            bool   `json:"npxInstalled"`
@@ -273,20 +288,19 @@ func (ss *SkillsService) CheckEnv() EnvStatus {
 	status := EnvStatus{}
 
 	// 检查 node
-	if out, err := exec.Command("node", "--version").Output(); err == nil {
-		status.NodeVersion = strings.TrimSpace(string(out))
+	if ver, err := shellOutput("node --version"); err == nil && ver != "" {
+		status.NodeVersion = ver
 	}
 
 	// 检查 npx
-	if out, err := exec.Command("npx", "--version").Output(); err == nil {
+	if ver, err := shellOutput("npx --version"); err == nil && ver != "" {
 		status.NpxInstalled = true
-		status.NpxVersion = strings.TrimSpace(string(out))
+		status.NpxVersion = ver
 	}
 
-	// 检查 skills CLI（npx skills --version 或 npx skills --help）
+	// 检查 skills CLI
 	if status.NpxInstalled {
-		cmd := exec.Command("npx", "skills", "--help")
-		if err := cmd.Run(); err == nil {
+		if _, err := shellRun("npx skills --help"); err == nil {
 			status.SkillsInstalled = true
 		}
 	}
@@ -307,9 +321,7 @@ func (ss *SkillsService) CheckEnv() EnvStatus {
 // InstallSkillsCLI 安装 skills CLI
 func (ss *SkillsService) InstallSkillsCLI() error {
 	fmt.Println("安装 skills CLI...")
-	cmd := exec.Command("npm", "install", "-g", "@anthropic-ai/skills")
-	cmd.Env = os.Environ()
-	output, err := cmd.CombinedOutput()
+	output, err := shellRun("npm install -g @anthropic-ai/skills")
 	if err != nil {
 		fmt.Printf("安装 skills CLI 失败: %s\n%s\n", err, string(output))
 		return fmt.Errorf("安装 skills CLI 失败: %v\n%s", err, string(output))
@@ -321,9 +333,7 @@ func (ss *SkillsService) InstallSkillsCLI() error {
 // InstallFindSkillsPlus 安装 find-skills-plus
 func (ss *SkillsService) InstallFindSkillsPlus() error {
 	fmt.Println("安装 find-skills-plus...")
-	cmd := exec.Command("npx", "skills", "add", "yinhui1984/find_skills_plus")
-	cmd.Env = os.Environ()
-	output, err := cmd.CombinedOutput()
+	output, err := shellRun("npx skills add yinhui1984/find_skills_plus")
 	if err != nil {
 		fmt.Printf("安装 find-skills-plus 失败: %s\n%s\n", err, string(output))
 		return fmt.Errorf("安装 find-skills-plus 失败: %v\n%s", err, string(output))
@@ -581,13 +591,11 @@ func (ss *SkillsService) FindRemoteSkills(query string) ([]RemoteSkill, error) {
 	// 优先使用 find-skills-plus（带描述），如果脚本不存在则回退到 npx skills find
 	if _, statErr := os.Stat(scriptPath); statErr == nil {
 		fmt.Printf("使用 find-skills-plus 搜索: %s\n", scriptPath)
-		cmd := exec.Command("node", scriptPath, query, "--timeout", "15")
-		cmd.Env = append(os.Environ(), "NODE_NO_WARNINGS=1")
-		output, err = cmd.CombinedOutput()
+		shellCmd := fmt.Sprintf("NODE_NO_WARNINGS=1 node '%s' '%s' --timeout 15", scriptPath, query)
+		output, err = shellRun(shellCmd)
 		if err != nil {
 			fmt.Printf("执行 find-skills-plus 失败: %v，回退到 npx skills find\n", err)
-			cmd2 := exec.Command("npx", "skills", "find", query)
-			output, err = cmd2.CombinedOutput()
+			output, err = shellRun(fmt.Sprintf("npx skills find '%s'", query))
 			if err != nil {
 				fmt.Printf("执行 npx skills find 也失败: %v\n", err)
 				return nil, fmt.Errorf("failed to search remote skills: %v", err)
@@ -595,8 +603,7 @@ func (ss *SkillsService) FindRemoteSkills(query string) ([]RemoteSkill, error) {
 		}
 	} else {
 		fmt.Println("find-skills-plus 脚本不存在，使用 npx skills find")
-		cmd := exec.Command("npx", "skills", "find", query)
-		output, err = cmd.CombinedOutput()
+		output, err = shellRun(fmt.Sprintf("npx skills find '%s'", query))
 		if err != nil {
 			fmt.Printf("执行 npx skills find 失败: %v\n", err)
 			return nil, fmt.Errorf("failed to execute npx skills find: %v", err)
@@ -765,10 +772,9 @@ func (ss *SkillsService) InstallRemoteSkill(fullName string, agents []string) er
 	defer os.RemoveAll(tempRepoDir)
 
 	// 克隆仓库
-	cloneCmd := exec.Command("git", "clone", "--depth", "1", repoURL, tempRepoDir)
-	output, err := cloneCmd.CombinedOutput()
+	cloneOutput, err := shellRun(fmt.Sprintf("git clone --depth 1 '%s' '%s'", repoURL, tempRepoDir))
 	if err != nil {
-		return fmt.Errorf("failed to clone repository: %v\nOutput: %s", err, string(output))
+		return fmt.Errorf("failed to clone repository: %v\nOutput: %s", err, string(cloneOutput))
 	}
 	fmt.Printf("✓ 仓库克隆成功\n")
 
@@ -1264,10 +1270,9 @@ func (ss *SkillsService) UpdateSkill(skillName string) error {
 	repoURL := fmt.Sprintf("https://github.com/%s.git", entry.Source)
 	fmt.Printf("从 GitHub 克隆: %s\n", repoURL)
 
-	cloneCmd := exec.Command("git", "clone", "--depth", "1", repoURL, tempRepoDir)
-	output, err := cloneCmd.CombinedOutput()
+	cloneOutput, err := shellRun(fmt.Sprintf("git clone --depth 1 '%s' '%s'", repoURL, tempRepoDir))
 	if err != nil {
-		return fmt.Errorf("failed to clone repository: %v\nOutput: %s", err, string(output))
+		return fmt.Errorf("failed to clone repository: %v\nOutput: %s", err, string(cloneOutput))
 	}
 	fmt.Printf("✓ 仓库克隆成功\n")
 
@@ -1387,10 +1392,9 @@ func (ss *SkillsService) InstallRemoteSkillToProject(projectPath string, fullNam
 	defer os.RemoveAll(tempRepoDir)
 
 	fmt.Printf("从 GitHub 克隆: %s\n", repoURL)
-	cloneCmd := exec.Command("git", "clone", "--depth", "1", repoURL, tempRepoDir)
-	output, err := cloneCmd.CombinedOutput()
+	cloneOutput, err := shellRun(fmt.Sprintf("git clone --depth 1 '%s' '%s'", repoURL, tempRepoDir))
 	if err != nil {
-		return fmt.Errorf("failed to clone repository: %v\nOutput: %s", err, string(output))
+		return fmt.Errorf("failed to clone repository: %v\nOutput: %s", err, string(cloneOutput))
 	}
 	fmt.Printf("✓ 仓库克隆成功\n")
 
