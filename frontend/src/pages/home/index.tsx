@@ -1,108 +1,128 @@
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
+import { useState, useEffect } from "react"
+import { useNavigate } from "react-router-dom"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { 
-  Rocket01Icon, 
-  CodeIcon,
-  PackageIcon,
-  DashboardSpeed01Icon 
+  ChartHistogramIcon,
+  LinkSquare01Icon,
+  Globe02Icon,
+  ArrowRight02Icon,
 } from "hugeicons-react"
+import Logo from "@/components/Logo"
+import { GetAllAgentSkills } from "@wailsjs/go/services/SkillsService"
 
 const HomePage = () => {
+  const navigate = useNavigate()
+  const [skillCount, setSkillCount] = useState(0)
+  const [agentCount, setAgentCount] = useState(0)
+
+  useEffect(() => {
+    loadStats()
+  }, [])
+
+  const loadStats = async () => {
+    try {
+      const skills = await GetAllAgentSkills()
+      if (skills) {
+        setSkillCount(skills.length)
+        const agents = new Set<string>()
+        skills.forEach((s: any) => s.agents?.forEach((a: string) => agents.add(a)))
+        setAgentCount(agents.size)
+      }
+    } catch {}
+  }
+
   return (
-    <div className="space-y-6">
-      <div className="space-y-2">
-        <h1 className="text-3xl font-bold tracking-tight">欢迎使用 Skills Manager</h1>
-        <p className="text-muted-foreground">
-          管理和组织您的开发技能与工具
+    <div className="max-w-2xl mx-auto space-y-8 pt-8">
+      {/* Welcome */}
+      <div className="text-center space-y-3">
+        <Logo size={48} className="mx-auto" />
+        <h1 className="text-2xl font-semibold tracking-tight">Skills Manager</h1>
+        <p className="text-sm text-muted-foreground leading-relaxed max-w-md mx-auto">
+          统一管理 Agent Skills，一键安装、链接到多个 AI Agent
         </p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        <Card>
-          <CardHeader>
-            <div className="flex items-center gap-2">
-              <div className="p-2 rounded-lg bg-primary/10">
-                <Rocket01Icon size={24} className="text-primary" />
-              </div>
-              <div>
-                <CardTitle>快速开始</CardTitle>
-                <CardDescription>开始创建您的第一个技能</CardDescription>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <Button className="w-full">创建新技能</Button>
+      {/* Stats */}
+      <div className="grid grid-cols-2 gap-3">
+        <Card className="border-dashed">
+          <CardContent className="pt-5 pb-4 text-center">
+            <p className="text-3xl font-semibold text-primary">{skillCount}</p>
+            <p className="text-xs text-muted-foreground mt-1">已安装技能</p>
           </CardContent>
         </Card>
-
-        <Card>
-          <CardHeader>
-            <div className="flex items-center gap-2">
-              <div className="p-2 rounded-lg bg-primary/10">
-                <CodeIcon size={24} className="text-primary" />
-              </div>
-              <div>
-                <CardTitle>模版库</CardTitle>
-                <CardDescription>浏览可用的技能模版</CardDescription>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <Button variant="outline" className="w-full">浏览模版</Button>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <div className="flex items-center gap-2">
-              <div className="p-2 rounded-lg bg-primary/10">
-                <PackageIcon size={24} className="text-primary" />
-              </div>
-              <div>
-                <CardTitle>文档</CardTitle>
-                <CardDescription>学习如何使用系统</CardDescription>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <Button variant="outline" className="w-full">查看文档</Button>
+        <Card className="border-dashed">
+          <CardContent className="pt-5 pb-4 text-center">
+            <p className="text-3xl font-semibold text-primary">{agentCount}</p>
+            <p className="text-xs text-muted-foreground mt-1">已链接 Agent</p>
           </CardContent>
         </Card>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <DashboardSpeed01Icon size={20} />
-            统计概览
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="space-y-2">
-              <p className="text-sm text-muted-foreground">总技能数</p>
-              <p className="text-3xl font-bold">12</p>
-              <Badge variant="secondary">+3 本月</Badge>
-            </div>
-            <div className="space-y-2">
-              <p className="text-sm text-muted-foreground">已激活</p>
-              <p className="text-3xl font-bold">8</p>
-              <Badge>66.7%</Badge>
-            </div>
-            <div className="space-y-2">
-              <p className="text-sm text-muted-foreground">待更新</p>
-              <p className="text-3xl font-bold">3</p>
-              <Badge variant="outline">25%</Badge>
-            </div>
-            <div className="space-y-2">
-              <p className="text-sm text-muted-foreground">收藏</p>
-              <p className="text-3xl font-bold">5</p>
-              <Badge variant="secondary">41.7%</Badge>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      {/* Quick Actions */}
+      <div className="space-y-2">
+        <h2 className="text-xs font-medium uppercase tracking-wider text-muted-foreground px-1">快捷操作</h2>
+        <div className="space-y-1.5">
+          <Card 
+            className="cursor-pointer transition-all hover:shadow-sm hover:border-primary/30 group"
+            onClick={() => navigate("/skills")}
+          >
+            <CardHeader className="p-4 pb-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-primary/8">
+                    <ChartHistogramIcon size={18} className="text-primary" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-sm">管理本地技能</CardTitle>
+                    <p className="text-xs text-muted-foreground mt-0.5">查看、更新或删除已安装的技能</p>
+                  </div>
+                </div>
+                <ArrowRight02Icon size={16} className="text-muted-foreground/40 group-hover:text-primary transition-colors" />
+              </div>
+            </CardHeader>
+          </Card>
+
+          <Card 
+            className="cursor-pointer transition-all hover:shadow-sm hover:border-primary/30 group"
+            onClick={() => navigate("/skills?tab=remote")}
+          >
+            <CardHeader className="p-4 pb-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-blue-500/8">
+                    <Globe02Icon size={18} className="text-blue-500" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-sm">搜索远程技能</CardTitle>
+                    <p className="text-xs text-muted-foreground mt-0.5">从 skills.sh 搜索并安装新技能</p>
+                  </div>
+                </div>
+                <ArrowRight02Icon size={16} className="text-muted-foreground/40 group-hover:text-blue-500 transition-colors" />
+              </div>
+            </CardHeader>
+          </Card>
+
+          <Card 
+            className="cursor-pointer transition-all hover:shadow-sm hover:border-primary/30 group"
+            onClick={() => navigate("/skills?tab=agents")}
+          >
+            <CardHeader className="p-4 pb-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-amber-500/8">
+                    <LinkSquare01Icon size={18} className="text-amber-500" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-sm">配置 Agent 链接</CardTitle>
+                    <p className="text-xs text-muted-foreground mt-0.5">管理技能与 Agent 之间的软链接</p>
+                  </div>
+                </div>
+                <ArrowRight02Icon size={16} className="text-muted-foreground/40 group-hover:text-amber-500 transition-colors" />
+              </div>
+            </CardHeader>
+          </Card>
+        </div>
+      </div>
     </div>
   )
 }

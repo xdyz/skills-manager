@@ -55,7 +55,7 @@ export default {
         },
       },
       fontFamily: {
-        sans: ['JetBrains Mono', 'monospace'],
+        sans: ['-apple-system', 'BlinkMacSystemFont', 'SF Pro Text', 'Segoe UI', 'Roboto', 'Helvetica Neue', 'sans-serif'],
       },
     },
   },

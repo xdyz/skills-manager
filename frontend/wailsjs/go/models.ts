@@ -1,0 +1,111 @@
+export namespace services {
+	
+	export class AgentInfo {
+	    name: string;
+	    localPath: string;
+	    isCustom: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new AgentInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.localPath = source["localPath"];
+	        this.isCustom = source["isCustom"];
+	    }
+	}
+	export class EnvStatus {
+	    npxInstalled: boolean;
+	    skillsInstalled: boolean;
+	    findSkillsPlusInstalled: boolean;
+	    nodeVersion: string;
+	    npxVersion: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new EnvStatus(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.npxInstalled = source["npxInstalled"];
+	        this.skillsInstalled = source["skillsInstalled"];
+	        this.findSkillsPlusInstalled = source["findSkillsPlusInstalled"];
+	        this.nodeVersion = source["nodeVersion"];
+	        this.npxVersion = source["npxVersion"];
+	    }
+	}
+	export class ProjectSkill {
+	    name: string;
+	    desc: string;
+	    path: string;
+	    language: string;
+	    framework: string;
+	    agents: string[];
+	    isGlobal: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new ProjectSkill(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.desc = source["desc"];
+	        this.path = source["path"];
+	        this.language = source["language"];
+	        this.framework = source["framework"];
+	        this.agents = source["agents"];
+	        this.isGlobal = source["isGlobal"];
+	    }
+	}
+	export class RemoteSkill {
+	    fullName: string;
+	    owner: string;
+	    repo: string;
+	    name: string;
+	    url: string;
+	    description: string;
+	    installed: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new RemoteSkill(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.fullName = source["fullName"];
+	        this.owner = source["owner"];
+	        this.repo = source["repo"];
+	        this.name = source["name"];
+	        this.url = source["url"];
+	        this.description = source["description"];
+	        this.installed = source["installed"];
+	    }
+	}
+	export class Skills {
+	    name: string;
+	    desc: string;
+	    path: string;
+	    language: string;
+	    framework: string;
+	    agents: string[];
+	
+	    static createFrom(source: any = {}) {
+	        return new Skills(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.desc = source["desc"];
+	        this.path = source["path"];
+	        this.language = source["language"];
+	        this.framework = source["framework"];
+	        this.agents = source["agents"];
+	    }
+	}
+
+}
+
