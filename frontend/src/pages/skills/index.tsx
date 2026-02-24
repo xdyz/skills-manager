@@ -169,9 +169,10 @@ const SkillsPage = () => {
       })
       
       await loadLocalSkills()
-      if (remoteSkills.length > 0) {
-        await searchRemoteSkills()
-      }
+      // 直接更新远程列表中对应项的安装状态，不重新搜索
+      setRemoteSkills(prev => prev.map(s => 
+        s.fullName === fullName ? { ...s, installed: true } : s
+      ))
     } catch (error) {
       console.error("安装 skill 失败:", error)
       toast({
@@ -220,9 +221,10 @@ const SkillsPage = () => {
       })
       
       await loadLocalSkills()
-      if (remoteSkills.length > 0) {
-        await searchRemoteSkills()
-      }
+      // 直接更新远程列表中对应项的安装状态，不重新搜索
+      setRemoteSkills(prev => prev.map(s => 
+        s.name === skillToDelete ? { ...s, installed: false } : s
+      ))
     } catch (error) {
       console.error("删除 skill 失败:", error)
       toast({
@@ -372,18 +374,19 @@ const SkillsPage = () => {
   )
 
   return (
-    <div className="space-y-5">
-      <div className="flex items-center justify-between">
-        <div className="space-y-1">
-          <h1 className="text-xl font-semibold tracking-tight">技能管理</h1>
-          <p className="text-sm text-muted-foreground">
-            管理本地技能和搜索远程技能
-          </p>
+    <Tabs value={activeTab} onValueChange={handleTabChange} className="flex flex-col h-full w-full">
+      {/* 固定头部区域 */}
+      <div className="shrink-0 p-6 pb-4 border-b">
+        <div className="flex items-center justify-between">
+          <div className="space-y-1">
+            <h1 className="text-xl font-semibold tracking-tight">技能管理</h1>
+            <p className="text-sm text-muted-foreground">
+              管理本地技能和搜索远程技能
+            </p>
+          </div>
         </div>
-      </div>
 
-      <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-        <TabsList className="h-9">
+        <TabsList className="h-9 mt-5">
           <TabsTrigger value="local" className="text-xs">
             <Folder01Icon size={14} className="mr-1.5" />
             本地技能 ({filteredLocalSkills.length})
@@ -398,9 +401,9 @@ const SkillsPage = () => {
           </TabsTrigger>
         </TabsList>
 
-        {/* 本地技能 Tab */}
-        <TabsContent value="local" className="space-y-4">
-          <div className="relative">
+        {/* 搜索框 */}
+        {activeTab === "local" && (
+          <div className="relative mt-4">
             <Search01Icon 
               size={18} 
               className="absolute transform -translate-y-1/2 left-3 top-1/2 text-muted-foreground" 
@@ -412,13 +415,70 @@ const SkillsPage = () => {
               onChange={(e) => setSearchQuery(e.target.value)}
             />
           </div>
+        )}
+        {activeTab === "remote" && (
+          <div className="flex gap-2 mt-4">
+            <div className="relative flex-1">
+              <Search01Icon 
+                size={18} 
+                className="absolute transform -translate-y-1/2 left-3 top-1/2 text-muted-foreground" 
+              />
+              <Input 
+                placeholder="搜索远程技能 (例如: react, vue, typescript)..." 
+                className="pl-10"
+                value={remoteSearchQuery}
+                onChange={(e) => setRemoteSearchQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    searchRemoteSkills()
+                  }
+                }}
+              />
+            </div>
+            <Button onClick={searchRemoteSkills} disabled={searchingRemote}>
+              <Search01Icon size={16} className="mr-2" />
+              搜索
+            </Button>
+          </div>
+        )}
+        {activeTab === "agents" && (
+          <div className="flex items-center justify-between gap-2 mt-4">
+            <div className="relative flex-1">
+              <Search01Icon 
+                size={18} 
+                className="absolute transform -translate-y-1/2 left-3 top-1/2 text-muted-foreground" 
+              />
+              <Input 
+                placeholder="搜索 Agent..." 
+                className="pl-10"
+                value={agentListSearch}
+                onChange={(e) => setAgentListSearch(e.target.value)}
+              />
+            </div>
+            <Button size="sm" onClick={() => {
+              setNewAgentName("")
+              setNewAgentGlobalPath("")
+              setNewAgentLocalPath("")
+              setShowAddAgentDialog(true)
+            }}>
+              <Add01Icon size={14} className="mr-1.5" />
+              添加 Agent
+            </Button>
+          </div>
+        )}
+      </div>
 
+      {/* 可滚动内容区域 */}
+      <div className="flex-1 overflow-y-auto p-6 pt-4">
+
+        {/* 本地技能 Tab */}
+        <TabsContent value="local" className="mt-0 h-full">
           {loading ? (
-            <div className="flex items-center justify-center py-12">
+            <div className="flex items-center justify-center h-full min-h-[300px]">
               <Folder01Icon className="animate-spin" size={32} />
             </div>
           ) : filteredLocalSkills.length === 0 ? (
-            <div className="py-12 text-center text-muted-foreground">
+            <div className="flex items-center justify-center h-full min-h-[300px] text-center text-muted-foreground">
               {searchQuery ? "未找到匹配的技能" : "暂无技能，请在远程搜索中安装"}
             </div>
           ) : (
@@ -534,40 +594,16 @@ const SkillsPage = () => {
         </TabsContent>
 
         {/* 远程搜索 Tab */}
-        <TabsContent value="remote" className="space-y-4">
-          <div className="flex gap-2">
-            <div className="relative flex-1">
-              <Search01Icon 
-                size={18} 
-                className="absolute transform -translate-y-1/2 left-3 top-1/2 text-muted-foreground" 
-              />
-              <Input 
-                placeholder="搜索远程技能 (例如: react, vue, typescript)..." 
-                className="pl-10"
-                value={remoteSearchQuery}
-                onChange={(e) => setRemoteSearchQuery(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    searchRemoteSkills()
-                  }
-                }}
-              />
-            </div>
-            <Button onClick={searchRemoteSkills} disabled={searchingRemote}>
-              <Search01Icon size={16} className="mr-2" />
-              搜索
-            </Button>
-          </div>
-
+        <TabsContent value="remote" className="space-y-4 mt-0 h-full">
           {searchingRemote ? (
-            <div className="flex items-center justify-center flex-1 min-h-[calc(100vh-300px)]">
+            <div className="flex items-center justify-center h-full min-h-[300px]">
               <div className="text-center">
                 <Globe02Icon className="mx-auto mb-4 animate-spin" size={32} />
                 <p className="text-muted-foreground">正在搜索远程技能...</p>
               </div>
             </div>
           ) : remoteSkills.length === 0 ? (
-            <div className="flex items-center justify-center flex-1 min-h-[calc(100vh-300px)] text-muted-foreground">
+            <div className="flex items-center justify-center h-full min-h-[300px] text-muted-foreground">
               {remoteSearchQuery ? "未找到匹配的远程技能" : "输入关键词搜索远程技能"}
             </div>
           ) : (
@@ -664,31 +700,7 @@ const SkillsPage = () => {
         </TabsContent>
 
         {/* Agent 管理 Tab */}
-        <TabsContent value="agents" className="space-y-4">
-          <div className="flex items-center justify-between gap-2">
-            <div className="relative flex-1">
-              <Search01Icon 
-                size={18} 
-                className="absolute transform -translate-y-1/2 left-3 top-1/2 text-muted-foreground" 
-              />
-              <Input 
-                placeholder="搜索 Agent..." 
-                className="pl-10"
-                value={agentListSearch}
-                onChange={(e) => setAgentListSearch(e.target.value)}
-              />
-            </div>
-            <Button size="sm" onClick={() => {
-              setNewAgentName("")
-              setNewAgentGlobalPath("")
-              setNewAgentLocalPath("")
-              setShowAddAgentDialog(true)
-            }}>
-              <Add01Icon size={14} className="mr-1.5" />
-              添加 Agent
-            </Button>
-          </div>
-
+        <TabsContent value="agents" className="space-y-4 mt-0">
           <div className="grid grid-cols-1 gap-2 md:grid-cols-2 lg:grid-cols-3">
             {allAgents
               .filter(a => a.name.toLowerCase().includes(agentListSearch.toLowerCase()))
@@ -730,7 +742,7 @@ const SkillsPage = () => {
             </div>
           )}
         </TabsContent>
-      </Tabs>
+      </div>
 
       {/* Agent 选择对话框 */}
       <Dialog open={showAgentSelectDialog} onOpenChange={setShowAgentSelectDialog}>
@@ -1015,7 +1027,7 @@ const SkillsPage = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </Tabs>
   )
 }
 

@@ -259,15 +259,16 @@ func (ss *SkillsService) Startup(ctx context.Context) {
 	ss.ctx = ctx
 }
 
-// shellRun 通过用户的 login shell 执行命令，确保 GUI 应用能继承完整的 shell 环境（PATH 等）
-// macOS GUI 应用不会加载 .zshrc/.bash_profile，直接 exec.Command 找不到 nvm/homebrew 安装的命令
+// shellRun 通过用户的 interactive login shell 执行命令，确保 GUI 应用能继承完整的 shell 环境
+// macOS GUI 应用不会加载 .zshrc，而 nvm 等工具的初始化脚本通常在 .zshrc 中
+// 使用 -i（interactive）确保 .zshrc 被加载，-l（login）确保 .zprofile 被加载
 func shellRun(command string) ([]byte, error) {
-	return exec.Command("/bin/zsh", "-l", "-c", command).CombinedOutput()
+	return exec.Command("/bin/zsh", "-li", "-c", command).CombinedOutput()
 }
 
-// shellOutput 通过 login shell 执行命令并返回 stdout
+// shellOutput 通过 interactive login shell 执行命令并返回 stdout
 func shellOutput(command string) (string, error) {
-	out, err := exec.Command("/bin/zsh", "-l", "-c", command).Output()
+	out, err := exec.Command("/bin/zsh", "-li", "-c", command).Output()
 	if err != nil {
 		return "", err
 	}

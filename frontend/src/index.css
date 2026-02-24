@@ -22,7 +22,7 @@
     --destructive-foreground: 0 0% 98%;
     --border: 214 20% 92%;
     --input: 214 20% 92%;
-    --ring: 215 20% 65%;
+    --ring: 152 57% 46%;
     --chart-1: 152 57% 46%;
     --chart-2: 173 58% 39%;
     --chart-3: 197 71% 52%;
@@ -50,7 +50,7 @@
     --destructive-foreground: 0 0% 98%;
     --border: 224 20% 22%;
     --input: 224 20% 22%;
-    --ring: 215 20% 45%;
+    --ring: 152 57% 46%;
     --chart-1: 152 57% 46%;
     --chart-2: 173 58% 39%;
     --chart-3: 197 71% 52%;
@@ -70,4 +70,36 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
+}
+
+/* 自定义滚动条 - macOS 风格 */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+*:hover {
+  scrollbar-color: hsl(var(--muted-foreground) / 0.3) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 3px;
+}
+
+*:hover::-webkit-scrollbar-thumb {
+  background: hsl(var(--muted-foreground) / 0.25);
+}
+
+*:hover::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground) / 0.4);
 }

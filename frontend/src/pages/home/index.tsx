@@ -32,7 +32,7 @@ const HomePage = () => {
   }
 
   return (
-    <div className="max-w-2xl mx-auto space-y-8 pt-8">
+    <div className="max-w-2xl mx-auto space-y-8 pt-8 p-6 overflow-y-auto h-full">
       {/* Welcome */}
       <div className="text-center space-y-3">
         <Logo size={48} className="mx-auto" />

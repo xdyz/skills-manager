@@ -33,6 +33,7 @@ import {
   CheckmarkCircle02Icon,
   Search01Icon,
   Folder01Icon,
+  Link04Icon,
 } from "hugeicons-react"
 import {
   GetProjectSkills,
@@ -349,7 +350,7 @@ const ProjectsPage = () => {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 p-6 overflow-y-auto h-full">
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-xl font-bold">{getFolderName(folderPath)}</h2>
@@ -517,7 +518,7 @@ const ProjectsPage = () => {
                                 </>
                               ) : (
                                 <>
-                                  <Download01Icon size={14} className="mr-1.5" />
+                                  <Link04Icon size={14} className="mr-1.5" />
                                   链接到项目
                                 </>
                               )}
