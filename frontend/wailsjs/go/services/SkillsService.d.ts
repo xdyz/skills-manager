@@ -5,8 +5,6 @@ import {context} from '../models';
 
 export function AddCustomAgent(arg1:string,arg2:string,arg3:string):Promise<void>;
 
-export function CheckEnv():Promise<services.EnvStatus>;
-
 export function DeleteSkill(arg1:string):Promise<void>;
 
 export function FindRemoteSkills(arg1:string):Promise<Array<services.RemoteSkill>>;
@@ -21,15 +19,11 @@ export function GetSkillAgentLinks(arg1:string):Promise<Array<string>>;
 
 export function GetSupportedAgents():Promise<Array<services.AgentInfo>>;
 
-export function InstallFindSkillsPlus():Promise<void>;
-
 export function InstallRemoteSkill(arg1:string,arg2:Array<string>):Promise<void>;
 
 export function InstallRemoteSkillToProject(arg1:string,arg2:string,arg3:Array<string>):Promise<void>;
 
 export function InstallSkillToProject(arg1:string,arg2:string,arg3:Array<string>):Promise<void>;
-
-export function InstallSkillsCLI():Promise<void>;
 
 export function RemoveCustomAgent(arg1:string):Promise<void>;
 

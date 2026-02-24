@@ -6,10 +6,6 @@ export function AddCustomAgent(arg1, arg2, arg3) {
   return window['go']['services']['SkillsService']['AddCustomAgent'](arg1, arg2, arg3);
 }
 
-export function CheckEnv() {
-  return window['go']['services']['SkillsService']['CheckEnv']();
-}
-
 export function DeleteSkill(arg1) {
   return window['go']['services']['SkillsService']['DeleteSkill'](arg1);
 }
@@ -38,10 +34,6 @@ export function GetSupportedAgents() {
   return window['go']['services']['SkillsService']['GetSupportedAgents']();
 }
 
-export function InstallFindSkillsPlus() {
-  return window['go']['services']['SkillsService']['InstallFindSkillsPlus']();
-}
-
 export function InstallRemoteSkill(arg1, arg2) {
   return window['go']['services']['SkillsService']['InstallRemoteSkill'](arg1, arg2);
 }
@@ -52,10 +44,6 @@ export function InstallRemoteSkillToProject(arg1, arg2, arg3) {
 
 export function InstallSkillToProject(arg1, arg2, arg3) {
   return window['go']['services']['SkillsService']['InstallSkillToProject'](arg1, arg2, arg3);
-}
-
-export function InstallSkillsCLI() {
-  return window['go']['services']['SkillsService']['InstallSkillsCLI']();
 }
 
 export function RemoveCustomAgent(arg1) {

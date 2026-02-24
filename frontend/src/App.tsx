@@ -3,7 +3,7 @@ import { RouterProvider } from "react-router-dom"
 import routes from "./routes"
 import SetupPage from "./pages/setup"
 import Logo from "./components/Logo"
-import { CheckEnv } from "@wailsjs/go/services/SkillsService"
+import { RefreshEnv } from "@wailsjs/go/services/EnvService"
 
 interface EnvStatus {
   npxInstalled: boolean
@@ -26,7 +26,7 @@ const App = () => {
     setLoading(true)
     try {
       const [status] = await Promise.all([
-        CheckEnv(),
+        RefreshEnv(),
         new Promise(resolve => setTimeout(resolve, 500)), // 最少显示 500ms loading
       ])
       setEnvStatus(status as EnvStatus)
@@ -52,7 +52,7 @@ const App = () => {
     return (
       <div className="flex items-center justify-center w-screen h-screen bg-background">
         <div className="text-center">
-          <div className="mx-auto mb-4 animate-pulse">
+          <div className="flex justify-center mb-4 animate-pulse">
             <Logo size={56} />
           </div>
           <p className="text-sm text-muted-foreground">正在检查运行环境...</p>

@@ -9,7 +9,7 @@ import {
   RefreshIcon,
   AlertCircleIcon,
 } from "hugeicons-react"
-import { InstallSkillsCLI, InstallFindSkillsPlus, CheckEnv } from "@wailsjs/go/services/SkillsService"
+import { InstallSkillsCLI, InstallFindSkillsPlus, RefreshEnv } from "@wailsjs/go/services/EnvService"
 import { BrowserOpenURL } from "@wailsjs/runtime/runtime"
 import Logo from "@/components/Logo"
 
@@ -37,7 +37,7 @@ const SetupPage = ({ envStatus, onEnvReady }: SetupPageProps) => {
     setChecking(true)
     setError(null)
     try {
-      const result = await CheckEnv()
+      const result = await RefreshEnv()
       setStatus(result)
       if (result.npxInstalled && result.skillsInstalled && result.findSkillsPlusInstalled) {
         onEnvReady()

@@ -20,6 +20,7 @@ func main() {
 	app := backend.NewApp()
 	folderService := services.NewFolderService()
 	skillsService := services.NewSkillsService()
+	envService := services.NewEnvService()
 
 	// Create application with options
 	err := wails.Run(&options.App{
@@ -34,11 +35,13 @@ func main() {
 			app.Startup(ctx)
 			folderService.Startup(ctx)
 			skillsService.Startup(ctx)
+			envService.Startup(ctx)
 		},
 		Bind: []interface{}{
 			app,
 			folderService,
 			skillsService,
+			envService,
 		},
 		// 👇 添加调试配置
 		Debug: options.Debug{
