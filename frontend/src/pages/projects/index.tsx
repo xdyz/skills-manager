@@ -1,10 +1,11 @@
 import { useState, useEffect } from "react"
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Checkbox } from "@/components/ui/checkbox"
-import { useToast } from "@/components/ui/use-toast"
+import { toast } from "@/components/ui/use-toast"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import {
   Dialog,
   DialogContent,
@@ -32,23 +33,21 @@ import {
   Delete02Icon,
   CheckmarkCircle02Icon,
   Search01Icon,
-  Folder01Icon,
-  Link04Icon,
 } from "hugeicons-react"
 import {
   GetProjectSkills,
-  GetAllAgentSkills,
   GetSupportedAgents,
-  InstallSkillToProject,
   InstallRemoteSkillToProject,
   RemoveSkillFromProject,
   FindRemoteSkills,
   GetProjectSkillAgentLinks,
   UpdateProjectSkillAgentLinks,
 } from "@wailsjs/go/services/SkillsService"
+import { BrowserOpenURL } from "@wailsjs/runtime/runtime"
 import {
   Settings02Icon,
   RefreshIcon,
+  LinkSquare02Icon,
 } from "hugeicons-react"
 import { useSearchParams } from "react-router-dom"
 
@@ -63,8 +62,6 @@ const ProjectsPage = () => {
   const [projectSkills, setProjectSkills] = useState<any[]>([])
   const [loadingSkills, setLoadingSkills] = useState(false)
   const [showInstallDialog, setShowInstallDialog] = useState(false)
-  const [globalSkills, setGlobalSkills] = useState<any[]>([])
-  const [loadingGlobal, setLoadingGlobal] = useState(false)
   const [installingSkill, setInstallingSkill] = useState<string | null>(null)
   const [removingSkill, setRemovingSkill] = useState<string | null>(null)
   const [skillToRemove, setSkillToRemove] = useState<any | null>(null)
@@ -72,12 +69,11 @@ const ProjectsPage = () => {
   const [remoteSearchQuery, setRemoteSearchQuery] = useState("")
   const [remoteSkills, setRemoteSkills] = useState<any[]>([])
   const [searchingRemote, setSearchingRemote] = useState(false)
-  const [activeTab, setActiveTab] = useState("global")
   // Agent 选择
   const [allAgents, setAllAgents] = useState<AgentInfo[]>([])
   const [selectedAgents, setSelectedAgents] = useState<string[]>([])
   const [showAgentSelectDialog, setShowAgentSelectDialog] = useState(false)
-  const [pendingInstall, setPendingInstall] = useState<{ type: "global" | "remote"; name: string } | null>(null)
+  const [pendingInstall, setPendingInstall] = useState<{ name: string } | null>(null)
   const [agentSearchQuery, setAgentSearchQuery] = useState("")
   // 配置 Agent 链接
   const [showConfigDialog, setShowConfigDialog] = useState(false)
@@ -86,7 +82,6 @@ const ProjectsPage = () => {
   const [configAgentSearch, setConfigAgentSearch] = useState("")
   const [loadingLinks, setLoadingLinks] = useState(false)
   const [savingLinks, setSavingLinks] = useState(false)
-  const { toast } = useToast()
 
   useEffect(() => {
     if (folderPath) {
@@ -122,28 +117,13 @@ const ProjectsPage = () => {
     }
   }
 
-  const loadGlobalSkills = async () => {
-    try {
-      setLoadingGlobal(true)
-      const result = await GetAllAgentSkills()
-      setGlobalSkills(result || [])
-    } catch (error) {
-      console.error("加载全局 skills 失败:", error)
-      setGlobalSkills([])
-    } finally {
-      setLoadingGlobal(false)
-    }
-  }
-
-  const handleOpenInstallDialog = async () => {
+  const handleOpenInstallDialog = () => {
     setShowInstallDialog(true)
-    setActiveTab("global")
-    await loadGlobalSkills()
   }
 
   // 打开 agent 选择对话框
-  const openAgentSelect = (type: "global" | "remote", name: string) => {
-    setPendingInstall({ type, name })
+  const openAgentSelect = (name: string) => {
+    setPendingInstall({ name })
     setSelectedAgents([])
     setAgentSearchQuery("")
     setShowAgentSelectDialog(true)
@@ -153,51 +133,22 @@ const ProjectsPage = () => {
   const handleConfirmInstall = async () => {
     if (!folderPath || !pendingInstall || selectedAgents.length === 0) return
     setShowAgentSelectDialog(false)
-
-    const { type, name } = pendingInstall
-    if (type === "global") {
-      await doInstallFromGlobal(name, selectedAgents)
-    } else {
-      await doInstallRemoteToProject(name, selectedAgents)
-    }
+    await doInstallRemoteToProject(pendingInstall.name, selectedAgents)
     setPendingInstall(null)
   }
 
-  // 从全局安装到项目（软链接）
-  const doInstallFromGlobal = async (skillName: string, agents: string[]) => {
-    if (!folderPath) return
-    try {
-      setInstallingSkill(skillName)
-      await InstallSkillToProject(folderPath, skillName, agents)
-      toast({
-        title: "安装成功",
-        description: `全局 Skill "${skillName}" 已链接到 ${agents.length} 个 Agent`,
-      })
-      await loadProjectSkills(folderPath)
-    } catch (error) {
-      console.error("安装失败:", error)
-      toast({ title: "安装失败", description: `${error}`, variant: "destructive" })
-    } finally {
-      setInstallingSkill(null)
-    }
-  }
-
-  // 从远程直接安装到项目（不经过全局）
+  // 从远程直接安装到项目
   const doInstallRemoteToProject = async (fullName: string, agents: string[]) => {
     if (!folderPath) return
     try {
       setInstallingSkill(fullName)
       const skillName = fullName.split("@")[1] || fullName
       await InstallRemoteSkillToProject(folderPath, fullName, agents)
-      toast({
-        title: "安装成功",
-        description: `Skill "${skillName}" 已安装到 ${agents.length} 个 Agent（仅项目可用）`,
-      })
+      toast({ title: `Skill "${skillName}" 已安装到 ${agents.length} 个 Agent（仅项目可用）`, variant: "success" })
       await loadProjectSkills(folderPath)
-      await loadGlobalSkills()
     } catch (error) {
       console.error("安装失败:", error)
-      toast({ title: "安装失败", description: `${error}`, variant: "destructive" })
+      toast({ title: `${error}`, variant: "destructive" })
     } finally {
       setInstallingSkill(null)
     }
@@ -225,14 +176,11 @@ const ProjectsPage = () => {
     try {
       setRemovingSkill(skillToRemove.name)
       await RemoveSkillFromProject(folderPath, skillToRemove.name)
-      toast({
-        title: "已移除",
-        description: `Skill "${skillToRemove.name}" 已从项目中移除`,
-      })
+      toast({ title: `Skill "${skillToRemove.name}" 已从项目中移除`, variant: "success" })
       await loadProjectSkills(folderPath)
     } catch (error) {
       console.error("移除失败:", error)
-      toast({ title: "移除失败", description: `${error}`, variant: "destructive" })
+      toast({ title: `${error}`, variant: "destructive" })
     } finally {
       setRemovingSkill(null)
       setSkillToRemove(null)
@@ -281,7 +229,7 @@ const ProjectsPage = () => {
       setConfigSelectedAgents(links || [])
     } catch (error) {
       console.error("加载 agent 链接失败:", error)
-      toast({ title: "加载失败", description: `获取 Agent 链接信息失败: ${error}`, variant: "destructive" })
+      toast({ title: `获取 Agent 链接信息失败: ${error}`, variant: "destructive" })
     } finally {
       setLoadingLinks(false)
     }
@@ -312,15 +260,12 @@ const ProjectsPage = () => {
     setSavingLinks(true)
     try {
       await UpdateProjectSkillAgentLinks(folderPath, configSkillName, configSelectedAgents)
-      toast({
-        title: "配置已保存",
-        description: `Skill "${configSkillName}" 已更新链接到 ${configSelectedAgents.length} 个 Agent`,
-      })
+      toast({ title: `Skill "${configSkillName}" 已更新链接到 ${configSelectedAgents.length} 个 Agent`, variant: "success" })
       setShowConfigDialog(false)
       await loadProjectSkills(folderPath)
     } catch (error) {
       console.error("保存配置失败:", error)
-      toast({ title: "保存失败", description: `更新 Agent 链接失败: ${error}`, variant: "destructive" })
+      toast({ title: `更新 Agent 链接失败: ${error}`, variant: "destructive" })
     } finally {
       setSavingLinks(false)
     }
@@ -353,8 +298,8 @@ const ProjectsPage = () => {
     <div className="space-y-4 p-6 overflow-y-auto h-full">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-bold">{getFolderName(folderPath)}</h2>
-          <p className="text-sm text-muted-foreground truncate max-w-lg">{folderPath}</p>
+          <h2 className="text-lg font-semibold text-foreground/90">{getFolderName(folderPath)}</h2>
+          <p className="text-[12px] text-muted-foreground truncate max-w-lg">{folderPath}</p>
         </div>
         <div className="flex items-center gap-2">
           <Badge variant="outline" className="text-sm">
@@ -380,65 +325,101 @@ const ProjectsPage = () => {
           </Button>
         </div>
       ) : (
-        <div className="space-y-2">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
           {projectSkills.map((skill, index) => (
-            <div
-              key={index}
-              className="flex items-center gap-3 p-3 rounded-lg border hover:bg-accent/50 transition-colors"
-            >
-              <div className={`p-2 rounded-lg shrink-0 ${skill.isGlobal ? 'bg-blue-500/10' : 'bg-primary/10'}`}>
-                {skill.isGlobal ? (
-                  <Globe02Icon size={18} className="text-blue-500" />
-                ) : (
-                  <CodeIcon size={18} className="text-primary" />
-                )}
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <p className="text-sm font-medium truncate">{skill.name}</p>
-                  {skill.isGlobal ? (
-                    <Badge variant="secondary" className="text-[10px] px-1.5 py-0 shrink-0">全局</Badge>
-                  ) : (
-                    <Badge className="text-[10px] px-1.5 py-0 shrink-0">项目</Badge>
-                  )}
+            <Card key={index} className="flex flex-col border-border/50 shadow-none hover:shadow-sm hover:border-border transition-all duration-200">
+              <CardHeader className="pb-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-start gap-3 flex-1 min-w-0">
+                    <div className="p-2 rounded bg-primary/8 shrink-0">
+                      <CodeIcon size={18} className="text-primary" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <CardTitle className="text-[13px] truncate">{skill.name}</CardTitle>
+                    </div>
+                  </div>
                 </div>
-                <p className="text-xs text-muted-foreground truncate mt-0.5">
+              </CardHeader>
+              <CardContent className="flex-1 pb-3">
+                <p className="mb-3 text-[12px] text-muted-foreground line-clamp-3 min-h-[3.5rem]">
                   {skill.desc || "暂无描述"}
                 </p>
-                {(skill.agents || []).length > 0 && (
-                  <div className="flex flex-wrap gap-1 mt-1">
-                    {(skill.agents || []).map((a: string) => (
-                      <Badge key={a} variant="outline" className="text-[10px] px-1.5 py-0">{a}</Badge>
-                    ))}
-                  </div>
+                {skill.agents && skill.agents.length > 0 && (
+                  <button
+                    className="text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer text-left w-full"
+                    onClick={() => openConfigDialog(skill.name)}
+                  >
+                    <span className="font-medium">已链接 {skill.agents.length} 个 Agent: </span>
+                    {skill.agents.length <= 3 ? (
+                      skill.agents.join(", ")
+                    ) : (
+                      <>
+                        {skill.agents.slice(0, 3).join(", ")}
+                        <span className="ml-1">+{skill.agents.length - 3} more</span>
+                      </>
+                    )}
+                  </button>
                 )}
-              </div>
-              <div className="flex items-center gap-1.5 shrink-0">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8"
-                  onClick={() => openConfigDialog(skill.name)}
-                  title="配置 Agent"
-                >
-                  <Settings02Icon size={15} />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                  onClick={() => setSkillToRemove(skill)}
-                  disabled={removingSkill === skill.name}
-                  title="从项目移除"
-                >
-                  {removingSkill === skill.name ? (
-                    <RefreshIcon size={15} className="animate-spin" />
-                  ) : (
-                    <Delete02Icon size={15} />
+                {(!skill.agents || skill.agents.length === 0) && (
+                  <button
+                    className="text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer text-left"
+                    onClick={() => openConfigDialog(skill.name)}
+                  >
+                    <span className="font-medium text-amber-500">未链接任何 Agent，点击配置</span>
+                  </button>
+                )}
+              </CardContent>
+              <CardFooter className="flex justify-end gap-1 pt-4">
+                <TooltipProvider delayDuration={300}>
+                  {skill.source && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 rounded text-muted-foreground hover:text-blue-500 hover:bg-blue-500/8"
+                          onClick={() => BrowserOpenURL(`https://github.com/${skill.source}`)}
+                        >
+                          <LinkSquare02Icon size={14} />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>查看详情</TooltipContent>
+                    </Tooltip>
                   )}
-                </Button>
-              </div>
-            </div>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 rounded text-muted-foreground hover:text-primary hover:bg-primary/8"
+                        onClick={() => openConfigDialog(skill.name)}
+                      >
+                        <Settings02Icon size={14} />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>配置 Agent</TooltipContent>
+                  </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/8"
+                        onClick={() => setSkillToRemove(skill)}
+                        disabled={removingSkill === skill.name}
+                      >
+                        {removingSkill === skill.name ? (
+                          <RefreshIcon size={14} className="animate-spin" />
+                        ) : (
+                          <Delete02Icon size={14} />
+                        )}
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>从项目移除</TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </CardFooter>
+            </Card>
           ))}
         </div>
       )}
@@ -449,91 +430,11 @@ const ProjectsPage = () => {
           <DialogHeader>
             <DialogTitle>安装 Skill 到项目</DialogTitle>
             <DialogDescription>
-              选择从全局已有的 Skills 链接，或从远程搜索直接安装到项目本地
+              从远程搜索技能并安装到项目本地
             </DialogDescription>
           </DialogHeader>
 
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col overflow-hidden">
-            <TabsList className="shrink-0">
-              <TabsTrigger value="global">
-                <Folder01Icon size={14} className="mr-1.5" />
-                从全局安装
-              </TabsTrigger>
-              <TabsTrigger value="remote">
-                <Globe02Icon size={14} className="mr-1.5" />
-                从远程安装
-              </TabsTrigger>
-            </TabsList>
-
-            {/* 从全局安装 */}
-            <TabsContent value="global" className="flex-1 overflow-y-auto mt-2">
-              {loadingGlobal ? (
-                <div className="flex items-center justify-center py-12">
-                  <FolderOpenIcon className="animate-spin" size={32} />
-                </div>
-              ) : globalSkills.length === 0 ? (
-                <div className="py-12 text-center text-muted-foreground">
-                  <p>暂无全局 Skills</p>
-                  <p className="text-xs mt-1">请先在「Skills 技能」页面安装全局 Skill</p>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {globalSkills.map((skill, index) => {
-                    const installed = isInstalledInProject(skill.name)
-                    return (
-                      <div
-                        key={index}
-                        className={`flex items-center gap-3 p-3 rounded-lg border transition-colors ${
-                          installed ? "bg-muted/50" : "hover:bg-accent"
-                        }`}
-                      >
-                        <div className="p-2 rounded-lg bg-primary/10 shrink-0">
-                          <CodeIcon size={18} className="text-primary" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium truncate">{skill.name}</p>
-                          <p className="text-xs text-muted-foreground truncate">
-                            {skill.desc || "暂无描述"}
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-2 shrink-0">
-                          {skill.language && (
-                            <Badge variant="secondary" className="text-xs">{skill.language}</Badge>
-                          )}
-                          {installed ? (
-                            <Badge variant="outline" className="text-xs gap-1">
-                              <CheckmarkCircle02Icon size={12} />
-                              已安装
-                            </Badge>
-                          ) : (
-                            <Button
-                              size="sm"
-                              onClick={() => openAgentSelect("global", skill.name)}
-                              disabled={installingSkill === skill.name}
-                            >
-                              {installingSkill === skill.name ? (
-                                <>
-                                  <RefreshIcon size={14} className="mr-1.5 animate-spin" />
-                                  安装中...
-                                </>
-                              ) : (
-                                <>
-                                  <Link04Icon size={14} className="mr-1.5" />
-                                  链接到项目
-                                </>
-                              )}
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
-            </TabsContent>
-
-            {/* 从远程搜索安装 */}
-            <TabsContent value="remote" className="flex-1 overflow-y-auto mt-2 space-y-3">
+          <div className="flex-1 overflow-y-auto space-y-3">
               <div className="flex gap-2">
                 <div className="relative flex-1">
                   <Search01Icon
@@ -574,13 +475,13 @@ const ProjectsPage = () => {
                     return (
                       <div
                         key={index}
-                        className={`flex items-center gap-3 p-3 rounded-lg border transition-colors ${
-                          installed ? "bg-muted/50" : "hover:bg-accent"
+                        className={`flex items-center gap-3 p-3 rounded-md border border-border/50 transition-all duration-150 ${
+                          installed ? "bg-muted/40" : "hover:bg-accent/40"
                         }`}
                       >
-                        <div className={`p-2 rounded-lg shrink-0 ${installed ? "bg-green-500/10" : "bg-blue-500/10"}`}>
+                        <div className={`p-2 rounded shrink-0 ${installed ? "bg-primary/8" : "bg-blue-500/8"}`}>
                           {installed ? (
-                            <CheckmarkCircle02Icon size={18} className="text-green-500" />
+                            <CheckmarkCircle02Icon size={18} className="text-primary" />
                           ) : (
                             <Globe02Icon size={18} className="text-blue-500" />
                           )}
@@ -600,7 +501,7 @@ const ProjectsPage = () => {
                           ) : (
                             <Button
                               size="sm"
-                              onClick={() => openAgentSelect("remote", skill.fullName)}
+                              onClick={() => openAgentSelect(skill.fullName)}
                               disabled={installingSkill === skill.fullName}
                             >
                               {installingSkill === skill.fullName ? (
@@ -622,8 +523,7 @@ const ProjectsPage = () => {
                   })}
                 </div>
               )}
-            </TabsContent>
-          </Tabs>
+          </div>
         </DialogContent>
       </Dialog>
 

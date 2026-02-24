@@ -5,8 +5,6 @@ import {context} from '../models';
 
 export function CheckEnv():Promise<services.EnvStatus>;
 
-export function InstallFindSkillsPlus():Promise<void>;
-
 export function InstallSkillsCLI():Promise<void>;
 
 export function RefreshEnv():Promise<services.EnvStatus>;

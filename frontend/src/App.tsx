@@ -8,7 +8,6 @@ import { RefreshEnv } from "@wailsjs/go/services/EnvService"
 interface EnvStatus {
   npxInstalled: boolean
   skillsInstalled: boolean
-  findSkillsPlusInstalled: boolean
   nodeVersion: string
   npxVersion: string
 }
@@ -31,7 +30,7 @@ const App = () => {
       ])
       setEnvStatus(status as EnvStatus)
       const s = status as EnvStatus
-      if (s.npxInstalled && s.skillsInstalled && s.findSkillsPlusInstalled) {
+      if (s.npxInstalled && s.skillsInstalled) {
         setEnvReady(true)
       }
     } catch (e) {
@@ -39,7 +38,6 @@ const App = () => {
       setEnvStatus({
         npxInstalled: false,
         skillsInstalled: false,
-        findSkillsPlusInstalled: false,
         nodeVersion: "",
         npxVersion: "",
       })

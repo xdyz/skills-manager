@@ -9,14 +9,13 @@ import {
   RefreshIcon,
   AlertCircleIcon,
 } from "hugeicons-react"
-import { InstallSkillsCLI, InstallFindSkillsPlus, RefreshEnv } from "@wailsjs/go/services/EnvService"
+import { InstallSkillsCLI, RefreshEnv } from "@wailsjs/go/services/EnvService"
 import { BrowserOpenURL } from "@wailsjs/runtime/runtime"
 import Logo from "@/components/Logo"
 
 interface EnvStatus {
   npxInstalled: boolean
   skillsInstalled: boolean
-  findSkillsPlusInstalled: boolean
   nodeVersion: string
   npxVersion: string
 }
@@ -29,7 +28,6 @@ interface SetupPageProps {
 const SetupPage = ({ envStatus, onEnvReady }: SetupPageProps) => {
   const [status, setStatus] = useState<EnvStatus>(envStatus)
   const [installingSkills, setInstallingSkills] = useState(false)
-  const [installingPlus, setInstallingPlus] = useState(false)
   const [checking, setChecking] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -39,7 +37,7 @@ const SetupPage = ({ envStatus, onEnvReady }: SetupPageProps) => {
     try {
       const result = await RefreshEnv()
       setStatus(result)
-      if (result.npxInstalled && result.skillsInstalled && result.findSkillsPlusInstalled) {
+      if (result.npxInstalled && result.skillsInstalled) {
         onEnvReady()
       }
     } catch (e) {
@@ -62,20 +60,7 @@ const SetupPage = ({ envStatus, onEnvReady }: SetupPageProps) => {
     }
   }
 
-  const handleInstallPlus = async () => {
-    setInstallingPlus(true)
-    setError(null)
-    try {
-      await InstallFindSkillsPlus()
-      await recheck()
-    } catch (e) {
-      setError(`${e}`)
-    } finally {
-      setInstallingPlus(false)
-    }
-  }
-
-  const allReady = status.npxInstalled && status.skillsInstalled && status.findSkillsPlusInstalled
+  const allReady = status.npxInstalled && status.skillsInstalled
 
   return (
     <div className="flex items-center justify-center w-screen h-screen bg-background">
@@ -140,42 +125,6 @@ const SetupPage = ({ envStatus, onEnvReady }: SetupPageProps) => {
                   disabled={!status.npxInstalled || installingSkills}
                 >
                   {installingSkills ? (
-                    <>
-                      <RefreshIcon size={14} className="mr-1.5 animate-spin" />
-                      安装中...
-                    </>
-                  ) : (
-                    <>
-                      <Download01Icon size={14} className="mr-1.5" />
-                      安装
-                    </>
-                  )}
-                </Button>
-              )}
-            </div>
-
-            {/* find-skills-plus */}
-            <div className="flex items-center justify-between p-3 border rounded-lg">
-              <div className="flex items-center gap-3">
-                {status.findSkillsPlusInstalled ? (
-                  <CheckmarkCircle02Icon size={20} className="text-green-500" />
-                ) : (
-                  <Cancel01Icon size={20} className="text-destructive" />
-                )}
-                <div>
-                  <p className="text-sm font-medium">find-skills-plus</p>
-                  <p className="text-xs text-muted-foreground">增强版技能搜索（带描述）</p>
-                </div>
-              </div>
-              {status.findSkillsPlusInstalled ? (
-                <Badge variant="secondary" className="text-xs">已安装</Badge>
-              ) : (
-                <Button
-                  size="sm"
-                  onClick={handleInstallPlus}
-                  disabled={!status.skillsInstalled || installingPlus}
-                >
-                  {installingPlus ? (
                     <>
                       <RefreshIcon size={14} className="mr-1.5 animate-spin" />
                       安装中...

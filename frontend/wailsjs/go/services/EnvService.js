@@ -6,10 +6,6 @@ export function CheckEnv() {
   return window['go']['services']['EnvService']['CheckEnv']();
 }
 
-export function InstallFindSkillsPlus() {
-  return window['go']['services']['EnvService']['InstallFindSkillsPlus']();
-}
-
 export function InstallSkillsCLI() {
   return window['go']['services']['EnvService']['InstallSkillsCLI']();
 }

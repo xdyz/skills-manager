@@ -19,7 +19,6 @@ export namespace services {
 	export class EnvStatus {
 	    npxInstalled: boolean;
 	    skillsInstalled: boolean;
-	    findSkillsPlusInstalled: boolean;
 	    nodeVersion: string;
 	    npxVersion: string;
 	
@@ -31,7 +30,6 @@ export namespace services {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.npxInstalled = source["npxInstalled"];
 	        this.skillsInstalled = source["skillsInstalled"];
-	        this.findSkillsPlusInstalled = source["findSkillsPlusInstalled"];
 	        this.nodeVersion = source["nodeVersion"];
 	        this.npxVersion = source["npxVersion"];
 	    }
@@ -44,6 +42,7 @@ export namespace services {
 	    framework: string;
 	    agents: string[];
 	    isGlobal: boolean;
+	    source: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new ProjectSkill(source);
@@ -58,6 +57,7 @@ export namespace services {
 	        this.framework = source["framework"];
 	        this.agents = source["agents"];
 	        this.isGlobal = source["isGlobal"];
+	        this.source = source["source"];
 	    }
 	}
 	export class RemoteSkill {
@@ -91,6 +91,7 @@ export namespace services {
 	    language: string;
 	    framework: string;
 	    agents: string[];
+	    source: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new Skills(source);
@@ -104,6 +105,7 @@ export namespace services {
 	        this.language = source["language"];
 	        this.framework = source["framework"];
 	        this.agents = source["agents"];
+	        this.source = source["source"];
 	    }
 	}
 

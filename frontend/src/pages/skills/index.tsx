@@ -5,7 +5,8 @@ import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Checkbox } from "@/components/ui/checkbox"
-import { useToast } from "@/components/ui/use-toast"
+import { toast } from "@/components/ui/use-toast"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { Label } from "@/components/ui/label"
 import {
   Dialog,
@@ -30,6 +31,7 @@ import {
   CodeIcon,
   CheckmarkCircle02Icon,
   Folder01Icon,
+  Folder02Icon,
   Download01Icon,
   Globe02Icon,
   Delete02Icon,
@@ -37,6 +39,7 @@ import {
   Settings02Icon,
   Add01Icon,
   UserMultipleIcon,
+  LinkSquare02Icon,
 } from "hugeicons-react"
 import { GetAllAgentSkills, FindRemoteSkills, InstallRemoteSkill, DeleteSkill, UpdateSkill, GetSupportedAgents, GetSkillAgentLinks, UpdateSkillAgentLinks, AddCustomAgent, RemoveCustomAgent } from "@wailsjs/go/services/SkillsService"
 import { BrowserOpenURL } from "@wailsjs/runtime/runtime"
@@ -78,12 +81,9 @@ const SkillsPage = () => {
   // 自定义 Agent
   const [showAddAgentDialog, setShowAddAgentDialog] = useState(false)
   const [newAgentName, setNewAgentName] = useState("")
-  const [newAgentGlobalPath, setNewAgentGlobalPath] = useState("")
-  const [newAgentLocalPath, setNewAgentLocalPath] = useState("")
   const [addingAgent, setAddingAgent] = useState(false)
   const [agentToDelete, setAgentToDelete] = useState<string | null>(null)
   const [agentListSearch, setAgentListSearch] = useState("")
-  const { toast } = useToast()
 
   useEffect(() => {
     loadLocalSkills()
@@ -163,10 +163,7 @@ const SkillsPage = () => {
       setInstallingSkill(fullName)
       await InstallRemoteSkill(fullName, agents)
       
-      toast({
-        title: "安装成功",
-        description: `Skill "${fullName.split('@')[1]}" 已安装并链接到 ${agents.length} 个 Agent`,
-      })
+      toast({ title: `Skill "${fullName.split('@')[1]}" 已安装并链接到 ${agents.length} 个 Agent`, variant: "success" })
       
       await loadLocalSkills()
       // 直接更新远程列表中对应项的安装状态，不重新搜索
@@ -175,11 +172,7 @@ const SkillsPage = () => {
       ))
     } catch (error) {
       console.error("安装 skill 失败:", error)
-      toast({
-        title: "安装失败",
-        description: `安装失败: ${error}`,
-        variant: "destructive",
-      })
+      toast({ title: `安装失败: ${error}`, variant: "destructive" })
     } finally {
       setInstallingSkill(null)
     }
@@ -190,19 +183,12 @@ const SkillsPage = () => {
       setUpdatingSkill(skillName)
       await UpdateSkill(skillName)
       
-      toast({
-        title: "更新成功",
-        description: `Skill "${skillName}" 已成功更新到最新版本`,
-      })
+      toast({ title: `Skill "${skillName}" 已成功更新到最新版本`, variant: "success" })
       
       await loadLocalSkills()
     } catch (error) {
       console.error("更新 skill 失败:", error)
-      toast({
-        title: "更新失败",
-        description: `更新失败: ${error}`,
-        variant: "destructive",
-      })
+      toast({ title: `更新失败: ${error}`, variant: "destructive" })
     } finally {
       setUpdatingSkill(null)
     }
@@ -215,10 +201,7 @@ const SkillsPage = () => {
       setDeletingSkill(skillToDelete)
       await DeleteSkill(skillToDelete)
       
-      toast({
-        title: "删除成功",
-        description: `Skill "${skillToDelete}" 已成功删除`,
-      })
+      toast({ title: `Skill "${skillToDelete}" 已成功删除`, variant: "success" })
       
       await loadLocalSkills()
       // 直接更新远程列表中对应项的安装状态，不重新搜索
@@ -227,11 +210,7 @@ const SkillsPage = () => {
       ))
     } catch (error) {
       console.error("删除 skill 失败:", error)
-      toast({
-        title: "删除失败",
-        description: `删除失败: ${error}`,
-        variant: "destructive",
-      })
+      toast({ title: `删除失败: ${error}`, variant: "destructive" })
     } finally {
       setDeletingSkill(null)
       setSkillToDelete(null)
@@ -260,23 +239,16 @@ const SkillsPage = () => {
   }
 
   const handleAddAgent = async () => {
-    if (!newAgentName.trim() || !newAgentGlobalPath.trim() || !newAgentLocalPath.trim()) return
+    if (!newAgentName.trim()) return
     try {
       setAddingAgent(true)
-      await AddCustomAgent(newAgentName.trim(), newAgentGlobalPath.trim(), newAgentLocalPath.trim())
-      toast({
-        title: "添加成功",
-        description: `自定义 Agent "${newAgentName.trim()}" 已添加`,
-      })
+      await AddCustomAgent(newAgentName.trim())
+      toast({ title: `自定义 Agent "${newAgentName.trim()}" 已添加`, variant: "success" })
       setShowAddAgentDialog(false)
       await loadAgents()
     } catch (error) {
       console.error("添加 Agent 失败:", error)
-      toast({
-        title: "添加失败",
-        description: `添加 Agent 失败: ${error}`,
-        variant: "destructive",
-      })
+      toast({ title: `添加 Agent 失败: ${error}`, variant: "destructive" })
     } finally {
       setAddingAgent(false)
     }
@@ -286,19 +258,12 @@ const SkillsPage = () => {
     if (!agentToDelete) return
     try {
       await RemoveCustomAgent(agentToDelete)
-      toast({
-        title: "删除成功",
-        description: `自定义 Agent "${agentToDelete}" 已删除`,
-      })
+      toast({ title: `自定义 Agent "${agentToDelete}" 已删除`, variant: "success" })
       setAgentToDelete(null)
       await loadAgents()
     } catch (error) {
       console.error("删除 Agent 失败:", error)
-      toast({
-        title: "删除失败",
-        description: `删除 Agent 失败: ${error}`,
-        variant: "destructive",
-      })
+      toast({ title: `删除 Agent 失败: ${error}`, variant: "destructive" })
     }
   }
 
@@ -314,11 +279,7 @@ const SkillsPage = () => {
       setConfigSelectedAgents(links || [])
     } catch (error) {
       console.error("加载 agent 链接失败:", error)
-      toast({
-        title: "加载失败",
-        description: `获取 Agent 链接信息失败: ${error}`,
-        variant: "destructive",
-      })
+      toast({ title: `获取 Agent 链接信息失败: ${error}`, variant: "destructive" })
     } finally {
       setLoadingLinks(false)
     }
@@ -350,19 +311,12 @@ const SkillsPage = () => {
     setSavingLinks(true)
     try {
       await UpdateSkillAgentLinks(configSkillName, configSelectedAgents)
-      toast({
-        title: "配置已保存",
-        description: `Skill "${configSkillName}" 已更新链接到 ${configSelectedAgents.length} 个 Agent`,
-      })
+      toast({ title: `Skill "${configSkillName}" 已更新链接到 ${configSelectedAgents.length} 个 Agent`, variant: "success" })
       setShowConfigDialog(false)
       await loadLocalSkills()
     } catch (error) {
       console.error("保存配置失败:", error)
-      toast({
-        title: "保存失败",
-        description: `更新 Agent 链接失败: ${error}`,
-        variant: "destructive",
-      })
+      toast({ title: `更新 Agent 链接失败: ${error}`, variant: "destructive" })
     } finally {
       setSavingLinks(false)
     }
@@ -376,27 +330,27 @@ const SkillsPage = () => {
   return (
     <Tabs value={activeTab} onValueChange={handleTabChange} className="flex flex-col h-full w-full">
       {/* 固定头部区域 */}
-      <div className="shrink-0 p-6 pb-4 border-b">
+      <div className="shrink-0 px-6 pt-6 pb-4 border-b border-border/50">
         <div className="flex items-center justify-between">
           <div className="space-y-1">
-            <h1 className="text-xl font-semibold tracking-tight">技能管理</h1>
-            <p className="text-sm text-muted-foreground">
+            <h1 className="text-lg font-semibold tracking-tight text-foreground/90">技能管理</h1>
+            <p className="text-[13px] text-muted-foreground">
               管理本地技能和搜索远程技能
             </p>
           </div>
         </div>
 
-        <TabsList className="h-9 mt-5">
-          <TabsTrigger value="local" className="text-xs">
-            <Folder01Icon size={14} className="mr-1.5" />
+        <TabsList className="h-8 mt-5 bg-muted/60">
+          <TabsTrigger value="local" className="text-[12px] data-[state=active]:bg-background data-[state=active]:shadow-sm">
+            <Folder01Icon size={13} className="mr-1.5" />
             本地技能 ({filteredLocalSkills.length})
           </TabsTrigger>
-          <TabsTrigger value="remote" className="text-xs">
-            <Globe02Icon size={14} className="mr-1.5" />
+          <TabsTrigger value="remote" className="text-[12px] data-[state=active]:bg-background data-[state=active]:shadow-sm">
+            <Globe02Icon size={13} className="mr-1.5" />
             远程搜索
           </TabsTrigger>
-          <TabsTrigger value="agents" className="text-xs">
-            <UserMultipleIcon size={14} className="mr-1.5" />
+          <TabsTrigger value="agents" className="text-[12px] data-[state=active]:bg-background data-[state=active]:shadow-sm">
+            <UserMultipleIcon size={13} className="mr-1.5" />
             Agent 管理
           </TabsTrigger>
         </TabsList>
@@ -457,8 +411,6 @@ const SkillsPage = () => {
             </div>
             <Button size="sm" onClick={() => {
               setNewAgentName("")
-              setNewAgentGlobalPath("")
-              setNewAgentLocalPath("")
               setShowAddAgentDialog(true)
             }}>
               <Add01Icon size={14} className="mr-1.5" />
@@ -478,31 +430,46 @@ const SkillsPage = () => {
               <Folder01Icon className="animate-spin" size={32} />
             </div>
           ) : filteredLocalSkills.length === 0 ? (
-            <div className="flex items-center justify-center h-full min-h-[300px] text-center text-muted-foreground">
-              {searchQuery ? "未找到匹配的技能" : "暂无技能，请在远程搜索中安装"}
+            <div className="flex flex-col items-center justify-center h-full min-h-[360px] select-none">
+              {searchQuery ? (
+                <>
+                  <div className="w-16 h-16 rounded-2xl bg-muted/60 flex items-center justify-center mb-5">
+                    <Search01Icon size={28} className="text-muted-foreground/50" />
+                  </div>
+                  <p className="text-[15px] font-medium text-foreground/70 mb-1.5">未找到匹配的技能</p>
+                  <p className="text-[13px] text-muted-foreground/70">试试换个关键词，或在远程搜索中安装新技能</p>
+                </>
+              ) : (
+                <>
+                  <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary/10 to-emerald-500/10 flex items-center justify-center mb-5">
+                    <Folder01Icon size={28} className="text-primary/50" />
+                  </div>
+                  <p className="text-[15px] font-medium text-foreground/70 mb-1.5">还没有安装技能</p>
+                  <p className="text-[13px] text-muted-foreground/70">切换到「远程搜索」发现并安装社区技能</p>
+                </>
+              )}
             </div>
           ) : (
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
               {filteredLocalSkills.map((skill, index) => (
-                <Card key={index} className="flex flex-col hover:shadow-md transition-shadow">
+                <Card key={index} className="flex flex-col border-border/50 shadow-none hover:shadow-sm hover:border-border transition-all duration-200">
                   <CardHeader className="pb-3">
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex items-start gap-3 flex-1 min-w-0">
-                        <div className="p-2 rounded-lg bg-primary/10 shrink-0">
-                          <CodeIcon size={20} className="text-primary" />
+                        <div className="p-2 rounded bg-primary/8 shrink-0">
+                          <CodeIcon size={18} className="text-primary" />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <CardTitle className="text-base truncate">{skill.name}</CardTitle>
-                          <CardDescription className="text-xs truncate mt-1">
+                          <CardTitle className="text-[13px] truncate">{skill.name}</CardTitle>
+                          <CardDescription className="text-[11px] truncate mt-1">
                             {skill.path}
                           </CardDescription>
                         </div>
                       </div>
-                      <CheckmarkCircle02Icon size={18} className="text-green-500 shrink-0 mt-1" />
                     </div>
                   </CardHeader>
                   <CardContent className="flex-1 pb-3">
-                    <p className="mb-3 text-sm text-muted-foreground line-clamp-2 min-h-[2.5rem]">
+                    <p className="mb-3 text-[12px] text-muted-foreground line-clamp-2 min-h-[2.5rem]">
                       {skill.desc || "暂无描述"}
                     </p>
                     <div className="flex flex-wrap gap-2 mb-3">
@@ -538,54 +505,65 @@ const SkillsPage = () => {
                       </button>
                     )}
                   </CardContent>
-                  <CardFooter className="flex gap-2 pt-4">
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
-                      className="shrink-0"
-                      onClick={() => openConfigDialog(skill.name)}
-                      title="配置 Agent 链接"
-                    >
-                      <Settings02Icon size={14} />
-                    </Button>
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
-                      className="flex-1 min-w-0"
-                      onClick={() => handleUpdateSkill(skill.name)}
-                      disabled={updatingSkill === skill.name || deletingSkill === skill.name}
-                    >
-                      {updatingSkill === skill.name ? (
-                        <>
-                          <RefreshIcon size={14} className="mr-1.5 animate-spin" />
-                          <span className="truncate">更新中</span>
-                        </>
-                      ) : (
-                        <>
-                          <RefreshIcon size={14} className="mr-1.5" />
-                          <span className="truncate">更新</span>
-                        </>
+                  <CardFooter className="flex justify-end gap-1 pt-4">
+                    <TooltipProvider delayDuration={300}>
+                      {skill.source && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="h-7 w-7 rounded text-muted-foreground hover:text-blue-500 hover:bg-blue-500/8"
+                              onClick={() => BrowserOpenURL(`https://github.com/${skill.source}`)}
+                            >
+                              <LinkSquare02Icon size={14} />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>查看详情</TooltipContent>
+                        </Tooltip>
                       )}
-                    </Button>
-                    <Button 
-                      variant="destructive" 
-                      size="sm" 
-                      className="flex-1 min-w-0"
-                      onClick={() => setSkillToDelete(skill.name)}
-                      disabled={updatingSkill === skill.name || deletingSkill === skill.name}
-                    >
-                      {deletingSkill === skill.name ? (
-                        <>
-                          <Delete02Icon size={14} className="mr-1.5 animate-spin" />
-                          <span className="truncate">删除中</span>
-                        </>
-                      ) : (
-                        <>
-                          <Delete02Icon size={14} className="mr-1.5" />
-                          <span className="truncate">删除</span>
-                        </>
-                      )}
-                    </Button>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="h-7 w-7 rounded text-muted-foreground hover:text-primary hover:bg-primary/8"
+                            onClick={() => openConfigDialog(skill.name)}
+                          >
+                            <Settings02Icon size={14} />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>配置 Agent 链接</TooltipContent>
+                      </Tooltip>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="h-7 w-7 rounded text-muted-foreground hover:text-primary hover:bg-primary/8"
+                            onClick={() => handleUpdateSkill(skill.name)}
+                            disabled={updatingSkill === skill.name || deletingSkill === skill.name}
+                          >
+                            <RefreshIcon size={14} className={updatingSkill === skill.name ? "animate-spin" : ""} />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>更新</TooltipContent>
+                      </Tooltip>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="h-7 w-7 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/8"
+                            onClick={() => setSkillToDelete(skill.name)}
+                            disabled={updatingSkill === skill.name || deletingSkill === skill.name}
+                          >
+                            <Delete02Icon size={14} className={deletingSkill === skill.name ? "animate-spin" : ""} />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>删除</TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
                   </CardFooter>
                 </Card>
               ))}
@@ -603,26 +581,42 @@ const SkillsPage = () => {
               </div>
             </div>
           ) : remoteSkills.length === 0 ? (
-            <div className="flex items-center justify-center h-full min-h-[300px] text-muted-foreground">
-              {remoteSearchQuery ? "未找到匹配的远程技能" : "输入关键词搜索远程技能"}
+            <div className="flex flex-col items-center justify-center h-full min-h-[360px] select-none">
+              {remoteSearchQuery ? (
+                <>
+                  <div className="w-16 h-16 rounded-2xl bg-muted/60 flex items-center justify-center mb-5">
+                    <Search01Icon size={28} className="text-muted-foreground/50" />
+                  </div>
+                  <p className="text-[15px] font-medium text-foreground/70 mb-1.5">未找到匹配结果</p>
+                  <p className="text-[13px] text-muted-foreground/70">试试换个关键词搜索，例如 react、vue、python</p>
+                </>
+              ) : (
+                <>
+                  <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary/10 to-blue-500/10 flex items-center justify-center mb-5">
+                    <Globe02Icon size={28} className="text-primary/50" />
+                  </div>
+                  <p className="text-[15px] font-medium text-foreground/70 mb-1.5">探索远程技能</p>
+                  <p className="text-[13px] text-muted-foreground/70">在上方搜索框输入关键词，发现社区分享的技能</p>
+                </>
+              )}
             </div>
           ) : (
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
               {remoteSkills.map((skill, index) => (
-                <Card key={index} className="flex flex-col hover:shadow-md transition-shadow">
+                <Card key={index} className="flex flex-col border-border/50 shadow-none hover:shadow-sm hover:border-border transition-all duration-200">
                   <CardHeader className="pb-3">
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex items-start gap-3 flex-1 min-w-0">
-                        <div className={`p-2 rounded-lg shrink-0 ${skill.installed ? 'bg-green-500/10' : 'bg-blue-500/10'}`}>
+                        <div className={`p-2 rounded shrink-0 ${skill.installed ? 'bg-primary/8' : 'bg-blue-500/8'}`}>
                           {skill.installed ? (
-                            <CheckmarkCircle02Icon size={20} className="text-green-500" />
+                            <CheckmarkCircle02Icon size={18} className="text-primary" />
                           ) : (
-                            <Globe02Icon size={20} className="text-blue-500" />
+                            <Globe02Icon size={18} className="text-blue-500" />
                           )}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <CardTitle className="text-sm truncate">{skill.name}</CardTitle>
-                          <CardDescription className="text-xs truncate mt-0.5">
+                          <CardTitle className="text-[13px] truncate">{skill.name}</CardTitle>
+                          <CardDescription className="text-[11px] truncate mt-0.5">
                             {skill.owner}/{skill.repo}
                           </CardDescription>
                         </div>
@@ -707,10 +701,10 @@ const SkillsPage = () => {
               .map((agent) => (
               <div
                 key={agent.name}
-                className="flex items-center gap-3 p-3 rounded-lg border hover:bg-accent/50 transition-colors"
+                className="flex items-center gap-3 p-3 rounded-md border border-border/50 hover:bg-accent/40 transition-all duration-150"
               >
-                <div className={`p-2 rounded-lg shrink-0 ${agent.isCustom ? 'bg-amber-500/10' : 'bg-primary/10'}`}>
-                  <UserMultipleIcon size={16} className={agent.isCustom ? 'text-amber-500' : 'text-primary'} />
+                <div className={`p-2 rounded shrink-0 ${agent.isCustom ? 'bg-amber-500/8' : 'bg-primary/8'}`}>
+                  <UserMultipleIcon size={15} className={agent.isCustom ? 'text-amber-500' : 'text-primary'} />
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium truncate">{agent.name}</p>
@@ -941,64 +935,44 @@ const SkillsPage = () => {
 
       {/* 添加自定义 Agent 对话框 */}
       <Dialog open={showAddAgentDialog} onOpenChange={setShowAddAgentDialog}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>添加自定义 Agent</DialogTitle>
-            <DialogDescription>
-              配置一个自定义的 AI Agent，指定其全局和项目级别的 skills 目录路径。
-            </DialogDescription>
+        <DialogContent className="max-w-[340px] p-5">
+          <DialogHeader className="space-y-1 pb-1">
+            <DialogTitle className="text-base">添加自定义 Agent</DialogTitle>
           </DialogHeader>
 
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="agent-name">Agent 名称</Label>
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="agent-name" className="text-xs text-muted-foreground">名称（仅英文）</Label>
               <Input
                 id="agent-name"
-                placeholder="例如: My Custom Agent"
+                placeholder="MyAgent"
+                className="h-9 text-sm"
                 value={newAgentName}
                 onChange={(e) => setNewAgentName(e.target.value)}
               />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="agent-global-path">全局路径</Label>
-              <Input
-                id="agent-global-path"
-                placeholder="例如: .my-agent/skills"
-                value={newAgentGlobalPath}
-                onChange={(e) => setNewAgentGlobalPath(e.target.value)}
-              />
-              <p className="text-xs text-muted-foreground">相对于用户 Home 目录的路径，如 ~/.my-agent/skills</p>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="agent-local-path">项目路径</Label>
-              <Input
-                id="agent-local-path"
-                placeholder="例如: .my-agent/skills"
-                value={newAgentLocalPath}
-                onChange={(e) => setNewAgentLocalPath(e.target.value)}
-              />
-              <p className="text-xs text-muted-foreground">相对于项目根目录的路径</p>
-            </div>
+            {newAgentName.trim() && (
+              <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-muted/50 text-xs text-muted-foreground">
+                <Folder02Icon size={13} className="shrink-0" />
+                <span className="truncate">~/.{newAgentName.trim().toLowerCase().replace(/\s+/g, '-')}/skills</span>
+              </div>
+            )}
           </div>
 
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowAddAgentDialog(false)}>
+          <DialogFooter className="pt-2 gap-2">
+            <Button variant="ghost" size="sm" className="h-8" onClick={() => setShowAddAgentDialog(false)}>
               取消
             </Button>
             <Button
+              size="sm"
+              className="h-8"
               onClick={handleAddAgent}
-              disabled={addingAgent || !newAgentName.trim() || !newAgentGlobalPath.trim() || !newAgentLocalPath.trim()}
+              disabled={addingAgent || !newAgentName.trim()}
             >
               {addingAgent ? (
-                <>
-                  <RefreshIcon size={14} className="mr-1.5 animate-spin" />
-                  添加中...
-                </>
+                <RefreshIcon size={13} className="animate-spin" />
               ) : (
-                <>
-                  <Add01Icon size={14} className="mr-1.5" />
-                  添加
-                </>
+                "添加"
               )}
             </Button>
           </DialogFooter>

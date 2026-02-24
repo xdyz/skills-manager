@@ -3,18 +3,15 @@ package services
 import (
 	"context"
 	"fmt"
-	"os"
-	"path/filepath"
 	"sync"
 )
 
 // EnvStatus 环境依赖状态
 type EnvStatus struct {
-	NpxInstalled            bool   `json:"npxInstalled"`
-	SkillsInstalled         bool   `json:"skillsInstalled"`
-	FindSkillsPlusInstalled bool   `json:"findSkillsPlusInstalled"`
-	NodeVersion             string `json:"nodeVersion"`
-	NpxVersion              string `json:"npxVersion"`
+	NpxInstalled    bool   `json:"npxInstalled"`
+	SkillsInstalled bool   `json:"skillsInstalled"`
+	NodeVersion     string `json:"nodeVersion"`
+	NpxVersion      string `json:"npxVersion"`
 }
 
 // EnvService 环境检测服务，负责在启动时预加载环境状态
@@ -56,15 +53,8 @@ func (es *EnvService) detect() {
 		}
 	}
 
-	// 检查 find-skills-plus 是否已安装
-	homeDir, _ := os.UserHomeDir()
-	scriptPath := filepath.Join(homeDir, ".agents", "skills", "find-skills-plus", "scripts", "enrich_find.js")
-	if _, err := os.Stat(scriptPath); err == nil {
-		status.FindSkillsPlusInstalled = true
-	}
-
-	fmt.Printf("环境检查: npx=%v, skills=%v, find-skills-plus=%v, node=%s\n",
-		status.NpxInstalled, status.SkillsInstalled, status.FindSkillsPlusInstalled, status.NodeVersion)
+	fmt.Printf("环境检查: npx=%v, skills=%v, node=%s\n",
+		status.NpxInstalled, status.SkillsInstalled, status.NodeVersion)
 
 	es.mu.Lock()
 	es.status = status
@@ -98,16 +88,3 @@ func (es *EnvService) InstallSkillsCLI() error {
 	return nil
 }
 
-// InstallFindSkillsPlus 安装 find-skills-plus
-func (es *EnvService) InstallFindSkillsPlus() error {
-	fmt.Println("安装 find-skills-plus...")
-	output, err := shellRun("npx skills add yinhui1984/find_skills_plus")
-	if err != nil {
-		fmt.Printf("安装 find-skills-plus 失败: %s\n%s\n", err, string(output))
-		return fmt.Errorf("安装 find-skills-plus 失败: %v\n%s", err, string(output))
-	}
-	fmt.Printf("安装 find-skills-plus 成功: %s\n", string(output))
-	// 安装后刷新环境状态
-	es.detect()
-	return nil
-}

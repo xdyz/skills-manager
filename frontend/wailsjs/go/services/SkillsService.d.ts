@@ -3,7 +3,7 @@
 import {services} from '../models';
 import {context} from '../models';
 
-export function AddCustomAgent(arg1:string,arg2:string,arg3:string):Promise<void>;
+export function AddCustomAgent(arg1:string):Promise<void>;
 
 export function DeleteSkill(arg1:string):Promise<void>;
 

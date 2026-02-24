@@ -1,6 +1,16 @@
 import { Outlet, useNavigate, useLocation } from "react-router-dom"
 import { Button } from "@/components/ui/button"
 import { Toaster } from "@/components/ui/toaster"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import Logo from "@/components/Logo"
 import { 
   Home01Icon, 
@@ -21,6 +31,7 @@ const PageLayout = () => {
   const [theme, setTheme] = useState<"light" | "dark">("light")
   const [folders, setFolders] = useState<string[]>([])
   const [selectedFolder, setSelectedFolder] = useState<string | null>(null)
+  const [folderToRemove, setFolderToRemove] = useState<string | null>(null)
 
   useEffect(() => {
     const savedTheme = localStorage.getItem("theme") as "light" | "dark" | null
@@ -69,17 +80,24 @@ const PageLayout = () => {
     navigate(`/projects?path=${encodeURIComponent(folder)}`)
   }
 
-  const handleRemoveFolder = async (folder: string, e: React.MouseEvent) => {
+  const handleRemoveFolder = (folder: string, e: React.MouseEvent) => {
     e.stopPropagation()
+    setFolderToRemove(folder)
+  }
+
+  const confirmRemoveFolder = async () => {
+    if (!folderToRemove) return
     try {
-      await RemoveFolder(folder)
+      await RemoveFolder(folderToRemove)
       await loadFolders()
-      if (selectedFolder === folder) {
+      if (selectedFolder === folderToRemove) {
         setSelectedFolder(null)
         navigate("/home")
       }
     } catch (error) {
       console.error("Failed to remove folder:", error)
+    } finally {
+      setFolderToRemove(null)
     }
   }
 
@@ -99,100 +117,126 @@ const PageLayout = () => {
   }
 
   return (
-    <div className="flex flex-col w-screen h-screen">
+    <div className="flex flex-col w-screen h-screen bg-background">
       {/* Header */}
-      <header className="border-b bg-card/80 backdrop-blur-sm">
-        <div className="flex items-center justify-between px-4 h-12">
-          <div className="flex items-center gap-3">
-            <Logo size={26} />
-            <span className="text-sm font-semibold tracking-tight text-foreground">Skills Manager</span>
+      <header className="border-b border-border/60 bg-background/80 backdrop-blur-md">
+        <div className="flex items-center justify-between px-5 h-12">
+          <div className="flex items-center gap-2.5">
+            <Logo size={24} />
+            <span className="text-[13px] font-semibold tracking-tight text-foreground/85">Skills Manager</span>
           </div>
-          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={toggleTheme}>
-            {theme === "light" ? <Moon02Icon size={16} /> : <Sun03Icon size={16} />}
+          <Button variant="ghost" size="icon" className="h-7 w-7 rounded text-muted-foreground hover:text-foreground" onClick={toggleTheme}>
+            {theme === "light" ? <Moon02Icon size={15} /> : <Sun03Icon size={15} />}
           </Button>
         </div>
       </header>
 
       <div className="flex flex-1 overflow-hidden">
         {/* Sidebar */}
-        <aside className="flex flex-col w-52 border-r bg-card/50">
-          <nav className="flex flex-col gap-0.5 p-2">
+        <aside className="flex flex-col w-52 border-r border-border/50 bg-muted/30">
+          {/* Warm gradient at bottom */}
+
+          <nav className="flex flex-col gap-0.5 p-2.5 pt-3">
             <Button
               variant={isActive("/home") ? "secondary" : "ghost"}
-              className="justify-start gap-2 h-9 text-sm"
+              className={`justify-start gap-2.5 h-8 text-[13px] rounded ${isActive("/home") ? "bg-primary/10 text-primary font-medium" : "text-muted-foreground hover:text-foreground"}`}
               onClick={() => navigate("/home")}
             >
-              <Home01Icon size={16} />
+              <Home01Icon size={15} />
               首页
             </Button>
             <Button
               variant={isActive("/skills") ? "secondary" : "ghost"}
-              className="justify-start gap-2 h-9 text-sm"
+              className={`justify-start gap-2.5 h-8 text-[13px] rounded ${isActive("/skills") ? "bg-primary/10 text-primary font-medium" : "text-muted-foreground hover:text-foreground"}`}
               onClick={() => navigate("/skills")}
             >
-              <ChartHistogramIcon size={16} />
+              <ChartHistogramIcon size={15} />
               Skills 技能
             </Button>
           </nav>
 
           {/* Projects Section */}
-          <div className="flex flex-col flex-1 mt-2 overflow-hidden">
-            <div className="flex items-center justify-between px-3 mb-2">
-              <h3 className="text-xs font-medium uppercase tracking-wider text-muted-foreground">项目</h3>
+          <div className={`flex flex-col mt-3 overflow-hidden ${folders.length > 0 ? 'flex-1' : ''}`}>
+            <div className="flex items-center justify-between px-3.5 mb-2">
+              <h3 className="text-[11px] font-medium uppercase tracking-widest text-muted-foreground/70">项目</h3>
               <Button 
                 variant="ghost" 
                 size="icon" 
-                className="h-6 w-6 hover:bg-accent"
+                className="h-5 w-5 rounded-md hover:bg-primary/10 hover:text-primary"
                 onClick={handleAddFolder}
               >
-                <Add01Icon size={14} className="text-muted-foreground" />
+                <Add01Icon size={12} className="text-muted-foreground" />
               </Button>
             </div>
 
-            <div className="flex-1 overflow-y-auto">
-              {folders.length === 0 ? (
-                <div className="px-3 py-2">
-                  <p className="text-xs text-muted-foreground/50">暂无项目</p>
-                </div>
-              ) : (
-                <div className="space-y-px px-1">
+            {folders.length === 0 ? (
+              <div 
+                className="mx-2.5 px-3 py-2.5 rounded border border-dashed border-border/60 cursor-pointer hover:border-primary/30 hover:bg-primary/4 transition-colors"
+                onClick={handleAddFolder}
+              >
+                <p className="text-[11px] text-muted-foreground/50 text-center">点击 + 添加项目</p>
+              </div>
+            ) : (
+              <div className="flex-1 overflow-y-auto px-1.5">
+                <div className="space-y-0.5">
                   {folders.map((folder, index) => (
                     <div
                       key={index}
-                      className={`flex items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer group transition-colors ${
+                      className={`flex items-center gap-2 px-2.5 py-1.5 rounded cursor-pointer group transition-all duration-150 ${
                         selectedFolder === folder 
                           ? "bg-primary/10 text-primary" 
-                          : "hover:bg-accent"
+                          : "text-muted-foreground hover:bg-accent/60 hover:text-foreground"
                       }`}
                       onClick={() => handleSelectFolder(folder)}
                     >
                       {selectedFolder === folder ? (
-                        <FolderOpenIcon size={15} className="flex-shrink-0 text-primary" />
+                        <FolderOpenIcon size={14} className="flex-shrink-0 text-primary" />
                       ) : (
-                        <Folder02Icon size={15} className="flex-shrink-0 text-muted-foreground/60" />
+                        <Folder02Icon size={14} className="flex-shrink-0" />
                       )}
-                      <span className="flex-1 min-w-0 text-xs truncate">{getFolderName(folder)}</span>
+                      <span className="flex-1 min-w-0 text-[12px] truncate">{getFolderName(folder)}</span>
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="h-5 w-5 opacity-0 group-hover:opacity-100 shrink-0 hover:bg-destructive/10 hover:text-destructive"
+                        className="h-4 w-4 opacity-0 group-hover:opacity-100 shrink-0 rounded hover:bg-destructive/10 hover:text-destructive"
                         onClick={(e) => handleRemoveFolder(folder, e)}
                       >
-                        <Cancel01Icon size={10} />
+                        <Cancel01Icon size={9} />
                       </Button>
                     </div>
                   ))}
                 </div>
-              )}
-            </div>
+              </div>
+            )}
           </div>
         </aside>
 
         {/* Main Content */}
-        <main className="flex-1 flex flex-col overflow-hidden">
+        <main className="flex-1 flex flex-col overflow-hidden bg-background">
           <Outlet />
         </main>
       </div>
+      <AlertDialog open={!!folderToRemove} onOpenChange={(open) => !open && setFolderToRemove(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>确认移除项目</AlertDialogTitle>
+            <AlertDialogDescription>
+              确定要移除项目 <span className="font-semibold text-foreground">"{folderToRemove ? getFolderName(folderToRemove) : ""}"</span> 吗？
+              <br /><br />
+              此操作只会从列表中移除，不会删除项目文件。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmRemoveFolder}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              确认移除
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       <Toaster />
     </div>
   )
