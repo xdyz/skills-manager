@@ -46,9 +46,8 @@ func main() {
 			agentService,
 			envService,
 		},
-		// 👇 添加调试配置
 		Debug: options.Debug{
-			OpenInspectorOnStartup: true, // 启动时自动打开 DevTools
+			OpenInspectorOnStartup: true,
 		},
 		Mac: &mac.Options{
 			WebviewIsTransparent: false,
