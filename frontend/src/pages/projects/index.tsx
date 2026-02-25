@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
+import { Switch } from "@/components/ui/switch"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { toast } from "@/components/ui/use-toast"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import {
@@ -37,16 +39,24 @@ import {
   Settings02Icon,
   RefreshIcon,
   LinkSquare02Icon,
+  UserMultipleIcon,
+  Folder01Icon,
 } from "hugeicons-react"
 import {
   GetProjectSkills,
-  GetSupportedAgents,
   InstallRemoteSkillToProject,
   RemoveSkillFromProject,
   FindRemoteSkills,
   GetProjectSkillAgentLinks,
   UpdateProjectSkillAgentLinks,
 } from "@wailsjs/go/services/SkillsService"
+import {
+  GetProjectAgents,
+  GetSupportedAgents,
+  EnableProjectAgent,
+  DisableProjectAgent,
+  GetProjectAgentSkillCount,
+} from "@wailsjs/go/services/AgentService"
 import { BrowserOpenURL } from "@wailsjs/runtime/runtime"
 import { useSearchParams } from "react-router-dom"
 
@@ -59,6 +69,7 @@ const ProjectsPage = () => {
   const { t } = useTranslation()
   const [searchParams] = useSearchParams()
   const folderPath = searchParams.get("path")
+  const [activeTab, setActiveTab] = useState("skills")
   const [projectSkills, setProjectSkills] = useState<any[]>([])
   const [loadingSkills, setLoadingSkills] = useState(false)
   const [showInstallDialog, setShowInstallDialog] = useState(false)
@@ -79,13 +90,31 @@ const ProjectsPage = () => {
   const [configAgentSearch, setConfigAgentSearch] = useState("")
   const [loadingLinks, setLoadingLinks] = useState(false)
   const [savingLinks, setSavingLinks] = useState(false)
+  const [projectAgents, setProjectAgents] = useState<AgentInfo[]>([])
+  const [togglingAgent, setTogglingAgent] = useState<string | null>(null)
+  const [agentFilterQuery, setAgentFilterQuery] = useState("")
+  const [disableAgentConfirm, setDisableAgentConfirm] = useState<{ name: string; skillCount: number } | null>(null)
 
   useEffect(() => {
     if (folderPath) {
       loadProjectSkills(folderPath)
+      loadProjectAgents(folderPath)
     } else {
       setProjectSkills([])
+      setProjectAgents([])
     }
+  }, [folderPath])
+
+  // 窗口获得焦点时自动刷新（检测用户手动删除 agent 文件夹等外部变更）
+  useEffect(() => {
+    const handleFocus = () => {
+      if (folderPath) {
+        loadProjectSkills(folderPath)
+        loadProjectAgents(folderPath)
+      }
+    }
+    window.addEventListener("focus", handleFocus)
+    return () => window.removeEventListener("focus", handleFocus)
   }, [folderPath])
 
   useEffect(() => {
@@ -113,6 +142,75 @@ const ProjectsPage = () => {
       setLoadingSkills(false)
     }
   }
+
+  const loadProjectAgents = async (folder: string) => {
+    try {
+      const result = await GetProjectAgents(folder)
+      setProjectAgents(result || [])
+    } catch (error) {
+      console.error("Failed to load project agents:", error)
+      setProjectAgents([])
+    }
+  }
+
+  const isAgentEnabled = (agentName: string) => {
+    return projectAgents.some((a) => a.name === agentName)
+  }
+
+  const handleToggleAgent = async (agentName: string, enabled: boolean) => {
+    if (!folderPath) return
+    if (!enabled) {
+      // Disabling: check if directory has skills
+      try {
+        const count = await GetProjectAgentSkillCount(folderPath, agentName)
+        if (count > 0) {
+          setDisableAgentConfirm({ name: agentName, skillCount: count })
+          return
+        }
+      } catch (error) {
+        // If check fails, proceed with normal disable
+      }
+    }
+    await doToggleAgent(agentName, enabled, false)
+  }
+
+  const doToggleAgent = async (agentName: string, enabled: boolean, force: boolean) => {
+    if (!folderPath) return
+    setTogglingAgent(agentName)
+    try {
+      if (enabled) {
+        await EnableProjectAgent(folderPath, agentName)
+        toast({ title: t("toast-agent-enabled", { name: agentName }), variant: "success" })
+      } else {
+        await DisableProjectAgent(folderPath, agentName, force)
+        toast({ title: t("toast-agent-disabled", { name: agentName }), variant: "success" })
+      }
+      await loadProjectAgents(folderPath)
+      if (!enabled) {
+        // Refresh skills list since we may have removed some
+        await loadProjectSkills(folderPath)
+      }
+    } catch (error: any) {
+      const errMsg = String(error)
+      if (errMsg.includes("not empty")) {
+        toast({ title: t("agent-not-empty-hint"), variant: "destructive" })
+      } else {
+        toast({ title: t("toast-agent-toggle-failed", { error: errMsg }), variant: "destructive" })
+      }
+    } finally {
+      setTogglingAgent(null)
+    }
+  }
+
+  const handleForceDisableAgent = async () => {
+    if (!disableAgentConfirm) return
+    setDisableAgentConfirm(null)
+    await doToggleAgent(disableAgentConfirm.name, false, true)
+  }
+
+  const filteredAllAgents = allAgents.filter((agent) =>
+    agent.name.toLowerCase().includes(agentFilterQuery.toLowerCase())
+  )
 
   const handleOpenInstallDialog = () => {
     setShowInstallDialog(true)
@@ -206,7 +304,7 @@ const ProjectsPage = () => {
     }
   }
 
-  const filteredAgents = allAgents.filter((agent) =>
+  const filteredAgents = projectAgents.filter((agent) =>
     agent.name.toLowerCase().includes(agentSearchQuery.toLowerCase())
   )
 
@@ -236,7 +334,7 @@ const ProjectsPage = () => {
     )
   }
 
-  const filteredConfigAgents = allAgents.filter((agent) =>
+  const filteredConfigAgents = projectAgents.filter((agent) =>
     agent.name.toLowerCase().includes(configAgentSearch.toLowerCase())
   )
 
@@ -276,146 +374,227 @@ const ProjectsPage = () => {
     )
   }
 
-  if (loadingSkills) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <div className="text-center">
-          <FolderOpenIcon className="mx-auto mb-4 animate-spin" size={32} />
-          <p className="text-muted-foreground">{t("loading")}</p>
-        </div>
-      </div>
-    )
-  }
-
   return (
-    <div className="space-y-4 p-6 overflow-y-auto h-full">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-lg font-semibold text-foreground/90">{getFolderName(folderPath)}</h2>
+    <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col h-full w-full">
+      <div className="shrink-0 px-6 pt-6 pb-4 border-b border-border/50">
+        <div className="space-y-1">
+          <h2 className="text-lg font-semibold tracking-tight text-foreground/90">{getFolderName(folderPath)}</h2>
           <p className="text-[12px] text-muted-foreground truncate max-w-lg">{folderPath}</p>
         </div>
-        <div className="flex items-center gap-2">
-          <Badge variant="outline" className="text-sm">
-            {t("skills-count", { count: projectSkills.length })}
-          </Badge>
-          <Button size="sm" onClick={handleOpenInstallDialog}>
-            <Add01Icon size={16} className="mr-1.5" />
-            {t("install-skill")}
-          </Button>
-        </div>
+
+        <TabsList className="h-8 mt-5 bg-muted/60">
+          <TabsTrigger value="skills" className="text-[12px] data-[state=active]:bg-background data-[state=active]:shadow-sm">
+            <Folder01Icon size={13} className="mr-1.5" />
+            {t("project-skills-tab")} ({projectSkills.length})
+          </TabsTrigger>
+          <TabsTrigger value="agents" className="text-[12px] data-[state=active]:bg-background data-[state=active]:shadow-sm">
+            <UserMultipleIcon size={13} className="mr-1.5" />
+            {t("project-agents-tab")} ({projectAgents.length}/{allAgents.length})
+          </TabsTrigger>
+        </TabsList>
+
+        {activeTab === "skills" && (
+          <div className="flex items-center justify-between gap-2 mt-4">
+            <Badge variant="outline" className="text-xs">
+              {t("skills-count", { count: projectSkills.length })}
+            </Badge>
+            <Button size="sm" onClick={handleOpenInstallDialog}>
+              <Add01Icon size={14} className="mr-1.5" />
+              {t("install-skill")}
+            </Button>
+          </div>
+        )}
+        {activeTab === "agents" && (
+          <div className="flex items-center gap-2 mt-4">
+            <div className="relative flex-1">
+              <Search01Icon size={16} className="absolute transform -translate-y-1/2 left-3 top-1/2 text-muted-foreground" />
+              <Input
+                placeholder={t("search-agent")}
+                className="pl-9"
+                value={agentFilterQuery}
+                onChange={(e) => setAgentFilterQuery(e.target.value)}
+              />
+            </div>
+          </div>
+        )}
       </div>
 
-      {projectSkills.length === 0 ? (
-        <div className="flex flex-col items-center justify-center flex-1 min-h-[calc(100vh-200px)] text-center">
-          <CodeIcon size={48} className="mb-4 text-muted-foreground/20" />
-          <h3 className="text-lg font-medium text-muted-foreground">{t("no-skills")}</h3>
-          <p className="mt-1 text-sm text-muted-foreground/60">
-            {t("no-skills-in-project")}
-          </p>
-          <Button className="mt-4" onClick={handleOpenInstallDialog}>
-            <Add01Icon size={16} className="mr-1.5" />
-            {t("install-skill")}
-          </Button>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
-          {projectSkills.map((skill, index) => (
-            <Card key={index} className="flex flex-col border-border/50 shadow-none hover:shadow-sm hover:border-border transition-all duration-200">
-              <CardHeader className="pb-3">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex items-start gap-3 flex-1 min-w-0">
-                    <div className="p-2 rounded bg-primary/8 shrink-0">
-                      <CodeIcon size={18} className="text-primary" />
+      <div className="flex-1 overflow-y-auto p-6 pt-4">
+        {/* Skills Tab */}
+        <TabsContent value="skills" className="mt-0 h-full">
+          {loadingSkills ? (
+            <div className="flex items-center justify-center h-full min-h-[300px]">
+              <FolderOpenIcon className="animate-spin" size={32} />
+            </div>
+          ) : projectSkills.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-full min-h-[360px] text-center select-none">
+              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary/10 to-emerald-500/10 flex items-center justify-center mb-5">
+                <CodeIcon size={28} className="text-primary/50" />
+              </div>
+              <p className="text-[15px] font-medium text-foreground/70 mb-1.5">{t("no-skills")}</p>
+              <p className="text-[13px] text-muted-foreground/70">{t("no-skills-in-project")}</p>
+              <Button className="mt-4" onClick={handleOpenInstallDialog}>
+                <Add01Icon size={16} className="mr-1.5" />
+                {t("install-skill")}
+              </Button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
+              {projectSkills.map((skill, index) => (
+                <Card key={index} className="flex flex-col border-border/50 shadow-none hover:shadow-sm hover:border-border transition-all duration-200">
+                  <CardHeader className="pb-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-start gap-3 flex-1 min-w-0">
+                        <div className="p-2 rounded bg-primary/8 shrink-0">
+                          <CodeIcon size={18} className="text-primary" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <CardTitle className="text-[13px] truncate">{skill.name}</CardTitle>
+                        </div>
+                      </div>
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <CardTitle className="text-[13px] truncate">{skill.name}</CardTitle>
-                    </div>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent className="flex-1 pb-3">
-                <p className="mb-3 text-[12px] text-muted-foreground line-clamp-3 min-h-[3.5rem]">
-                  {skill.desc || t("no-description")}
-                </p>
-                {skill.agents && skill.agents.length > 0 && (
-                  <button
-                    className="text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer text-left w-full"
-                    onClick={() => openConfigDialog(skill.name)}
-                  >
-                    <span className="font-medium">{t("linked-agents-count", { count: skill.agents.length })}</span>
-                    {skill.agents.length <= 3 ? (
-                      skill.agents.join(", ")
-                    ) : (
-                      <>
-                        {skill.agents.slice(0, 3).join(", ")}
-                        <span className="ml-1">+{skill.agents.length - 3} more</span>
-                      </>
-                    )}
-                  </button>
-                )}
-                {(!skill.agents || skill.agents.length === 0) && (
-                  <button
-                    className="text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer text-left"
-                    onClick={() => openConfigDialog(skill.name)}
-                  >
-                    <span className="font-medium text-amber-500">{t("no-agent-linked")}</span>
-                  </button>
-                )}
-              </CardContent>
-              <CardFooter className="flex justify-end gap-1 pt-4">
-                <TooltipProvider delayDuration={300}>
-                  {skill.source && (
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 rounded text-muted-foreground hover:text-blue-500 hover:bg-blue-500/8"
-                          onClick={() => BrowserOpenURL(`https://github.com/${skill.source}`)}
-                        >
-                          <LinkSquare02Icon size={14} />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent>{t("view-details")}</TooltipContent>
-                    </Tooltip>
-                  )}
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7 rounded text-muted-foreground hover:text-primary hover:bg-primary/8"
+                  </CardHeader>
+                  <CardContent className="flex-1 pb-3">
+                    <p className="mb-3 text-[12px] text-muted-foreground line-clamp-3 min-h-[3.5rem]">
+                      {skill.desc || t("no-description")}
+                    </p>
+                    {skill.agents && skill.agents.length > 0 && (
+                      <button
+                        className="text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer text-left w-full"
                         onClick={() => openConfigDialog(skill.name)}
                       >
-                        <Settings02Icon size={14} />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>{t("config-agent")}</TooltipContent>
-                  </Tooltip>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/8"
-                        onClick={() => setSkillToRemove(skill)}
-                        disabled={removingSkill === skill.name}
-                      >
-                        {removingSkill === skill.name ? (
-                          <RefreshIcon size={14} className="animate-spin" />
+                        <span className="font-medium">{t("linked-agents-count", { count: skill.agents.length })}</span>
+                        {skill.agents.length <= 3 ? (
+                          skill.agents.join(", ")
                         ) : (
-                          <Delete02Icon size={14} />
+                          <>
+                            {skill.agents.slice(0, 3).join(", ")}
+                            <span className="ml-1">+{skill.agents.length - 3} more</span>
+                          </>
                         )}
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>{t("remove-from-project")}</TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              </CardFooter>
-            </Card>
-          ))}
-        </div>
-      )}
+                      </button>
+                    )}
+                    {(!skill.agents || skill.agents.length === 0) && (
+                      <button
+                        className="text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer text-left"
+                        onClick={() => openConfigDialog(skill.name)}
+                      >
+                        <span className="font-medium text-amber-500">{t("no-agent-linked")}</span>
+                      </button>
+                    )}
+                  </CardContent>
+                  <CardFooter className="flex justify-end gap-1 pt-4">
+                    <TooltipProvider delayDuration={300}>
+                      {skill.source && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 rounded text-muted-foreground hover:text-blue-500 hover:bg-blue-500/8"
+                              onClick={() => BrowserOpenURL(`https://github.com/${skill.source}`)}
+                            >
+                              <LinkSquare02Icon size={14} />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>{t("view-details")}</TooltipContent>
+                        </Tooltip>
+                      )}
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 rounded text-muted-foreground hover:text-primary hover:bg-primary/8"
+                            onClick={() => openConfigDialog(skill.name)}
+                          >
+                            <Settings02Icon size={14} />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>{t("config-agent")}</TooltipContent>
+                      </Tooltip>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/8"
+                            onClick={() => setSkillToRemove(skill)}
+                            disabled={removingSkill === skill.name}
+                          >
+                            {removingSkill === skill.name ? (
+                              <RefreshIcon size={14} className="animate-spin" />
+                            ) : (
+                              <Delete02Icon size={14} />
+                            )}
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>{t("remove-from-project")}</TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </CardFooter>
+                </Card>
+              ))}
+            </div>
+          )}
+        </TabsContent>
+
+        {/* Agents Tab */}
+        <TabsContent value="agents" className="mt-0">
+          {filteredAllAgents.length === 0 ? (
+            <div className="flex flex-col items-center justify-center min-h-[360px] text-center select-none">
+              <div className="w-16 h-16 rounded-2xl bg-muted/60 flex items-center justify-center mb-5">
+                <Search01Icon size={28} className="text-muted-foreground/50" />
+              </div>
+              <p className="text-[15px] font-medium text-foreground/70 mb-1.5">{t("no-matching-agent")}</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-2 md:grid-cols-2 lg:grid-cols-3">
+              {filteredAllAgents.map((agent) => {
+                const enabled = isAgentEnabled(agent.name)
+                const isToggling = togglingAgent === agent.name
+                return (
+                  <Card
+                    key={agent.name}
+                    className={`flex flex-col border-border/50 shadow-none transition-all duration-200 ${
+                      enabled
+                        ? "border-primary/30 bg-primary/5 hover:border-primary/50"
+                        : "hover:shadow-sm hover:border-border"
+                    }`}
+                  >
+                    <CardHeader className="pb-2">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-3 flex-1 min-w-0">
+                          <div className={`p-2 rounded shrink-0 ${enabled ? "bg-primary/10" : "bg-muted/60"}`}>
+                            <UserMultipleIcon size={16} className={enabled ? "text-primary" : "text-muted-foreground"} />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <CardTitle className="text-[13px] truncate">{agent.name}</CardTitle>
+                          </div>
+                        </div>
+                        <Switch
+                          checked={enabled}
+                          onCheckedChange={(checked) => handleToggleAgent(agent.name, checked)}
+                          disabled={isToggling}
+                        />
+                      </div>
+                    </CardHeader>
+                    <CardContent className="pb-3 pt-0">
+                      <p className="text-[11px] text-muted-foreground truncate">{agent.localPath}</p>
+                      <Badge
+                        variant={enabled ? "default" : "secondary"}
+                        className={`mt-2 text-[10px] ${enabled ? "bg-primary/15 text-primary hover:bg-primary/20" : ""}`}
+                      >
+                        {enabled ? t("agent-enabled") : t("agent-disabled")}
+                      </Badge>
+                    </CardContent>
+                  </Card>
+                )
+              })}
+            </div>
+          )}
+        </TabsContent>
+      </div>
 
       {/* Install Skill dialog */}
       <Dialog open={showInstallDialog} onOpenChange={setShowInstallDialog}>
@@ -427,8 +606,8 @@ const ProjectsPage = () => {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="flex-1 overflow-y-auto space-y-3">
-              <div className="flex gap-2">
+          <div className="flex flex-col flex-1 min-h-0 space-y-3">
+              <div className="flex gap-2 shrink-0">
                 <div className="relative flex-1">
                   <Search01Icon
                     size={16}
@@ -450,6 +629,7 @@ const ProjectsPage = () => {
                 </Button>
               </div>
 
+              <div className="flex-1 min-h-0 overflow-y-auto">
               {searchingRemote ? (
                 <div className="flex items-center justify-center py-12">
                   <div className="text-center">
@@ -495,10 +675,10 @@ const ProjectsPage = () => {
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
                           {installed ? (
-                            <Badge variant="outline" className="text-xs gap-1">
-                              <CheckmarkCircle02Icon size={12} />
+                            <span className="text-xs text-primary font-medium flex items-center gap-1">
+                              <CheckmarkCircle02Icon size={14} />
                               {t("installed")}
-                            </Badge>
+                            </span>
                           ) : (
                             <Button
                               size="sm"
@@ -524,6 +704,7 @@ const ProjectsPage = () => {
                   })}
                 </div>
               )}
+              </div>
           </div>
         </DialogContent>
       </Dialog>
@@ -716,7 +897,30 @@ const ProjectsPage = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+
+      {/* Disable agent confirmation dialog */}
+      <AlertDialog open={!!disableAgentConfirm} onOpenChange={(open) => !open && setDisableAgentConfirm(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("confirm-disable-agent-title")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("confirm-disable-agent-desc", { name: disableAgentConfirm?.name || "", count: disableAgentConfirm?.skillCount || 0 })}
+              <br /><br />
+              {t("confirm-disable-agent-note")}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t("cancel")}</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleForceDisableAgent}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {t("force-disable")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </Tabs>
   )
 }
 

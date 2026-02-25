@@ -2,6 +2,7 @@ import { Outlet, useNavigate, useLocation } from "react-router-dom"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/ui/button"
 import { Toaster } from "@/components/ui/toaster"
+import { useToast } from "@/components/ui/use-toast"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -16,24 +17,43 @@ import Logo from "@/components/Logo"
 import { 
   Home01Icon, 
   ChartHistogramIcon,
+  UserMultipleIcon,
   Moon02Icon,
   Sun03Icon,
   Add01Icon,
   FolderOpenIcon,
   Folder02Icon,
   Cancel01Icon,
+  Alert01Icon,
+  CheckmarkCircle02Icon,
+  Loading03Icon,
 } from "hugeicons-react"
 import { useState, useEffect } from "react"
 import { SelectFolder, GetFolders, RemoveFolder } from "@wailsjs/go/services/FolderService"
+import { 
+  CheckAgentUpdates, 
+  GetAgentUpdateCache, 
+  DismissAgentUpdate, 
+  ApplyAgentUpdates,
+} from "@wailsjs/go/services/AgentService"
 
 const PageLayout = () => {
   const navigate = useNavigate()
   const location = useLocation()
   const { t, i18n } = useTranslation()
+  const { toast } = useToast()
   const [theme, setTheme] = useState<"light" | "dark">("light")
   const [folders, setFolders] = useState<string[]>([])
   const [selectedFolder, setSelectedFolder] = useState<string | null>(null)
   const [folderToRemove, setFolderToRemove] = useState<string | null>(null)
+
+  // Agent update state
+  const [agentUpdateInfo, setAgentUpdateInfo] = useState<{
+    hasUpdate: boolean
+    newAgentNames: string[]
+  } | null>(null)
+  const [showUpdateDialog, setShowUpdateDialog] = useState(false)
+  const [applyingUpdate, setApplyingUpdate] = useState(false)
 
   useEffect(() => {
     const savedTheme = localStorage.getItem("theme") as "light" | "dark" | null
@@ -42,6 +62,7 @@ const PageLayout = () => {
       document.documentElement.classList.toggle("dark", savedTheme === "dark")
     }
     loadFolders()
+    checkForAgentUpdates()
   }, [])
 
   // Sync selectedFolder with URL
@@ -115,6 +136,70 @@ const PageLayout = () => {
     i18n.changeLanguage(newLng)
   }
 
+  // Agent update functions
+  const checkForAgentUpdates = async () => {
+    try {
+      const cache = await GetAgentUpdateCache()
+      const now = Math.floor(Date.now() / 1000)
+      const ONE_DAY = 24 * 60 * 60
+
+      // 如果24小时内已忽略，不再提示
+      if (cache.dismissedAt && now - cache.dismissedAt < ONE_DAY) {
+        return
+      }
+
+      // 如果缓存中有新 Agent 且未忽略，直接显示
+      if (cache.newAgentNames && cache.newAgentNames.length > 0) {
+        setAgentUpdateInfo({
+          hasUpdate: true,
+          newAgentNames: cache.newAgentNames,
+        })
+        return
+      }
+
+      // 每次启动都检查
+      const result = await CheckAgentUpdates()
+      if (result.hasUpdate && result.newAgents && result.newAgents.length > 0) {
+        setAgentUpdateInfo({
+          hasUpdate: true,
+          newAgentNames: result.newAgents.map((a: any) => a.Name),
+        })
+      }
+    } catch (error) {
+      console.error("Failed to check agent updates:", error)
+    }
+  }
+
+  const handleDismissUpdate = async () => {
+    try {
+      await DismissAgentUpdate()
+      setAgentUpdateInfo(null)
+    } catch (error) {
+      console.error("Failed to dismiss update:", error)
+    }
+  }
+
+  const handleApplyUpdate = async () => {
+    if (!agentUpdateInfo?.newAgentNames) return
+    setApplyingUpdate(true)
+    try {
+      await ApplyAgentUpdates()
+      const count = agentUpdateInfo.newAgentNames.length
+      setAgentUpdateInfo(null)
+      setShowUpdateDialog(false)
+      toast({
+        description: t("toast-agent-update-applied", { count }),
+      })
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        description: t("toast-agent-update-failed", { error: String(error) }),
+      })
+    } finally {
+      setApplyingUpdate(false)
+    }
+  }
+
   const isActive = (path: string) => {
     return location.pathname === path || (path === "/home" && location.pathname === "/")
   }
@@ -167,6 +252,14 @@ const PageLayout = () => {
             >
               <ChartHistogramIcon size={15} />
               {t("skills")}
+            </Button>
+            <Button
+              variant={isActive("/agents") ? "secondary" : "ghost"}
+              className={`justify-start gap-2.5 h-8 text-[13px] rounded ${isActive("/agents") ? "bg-primary/10 text-primary font-medium" : "text-muted-foreground hover:text-foreground"}`}
+              onClick={() => navigate("/agents")}
+            >
+              <UserMultipleIcon size={15} />
+              {t("agents")}
             </Button>
           </nav>
 
@@ -252,6 +345,85 @@ const PageLayout = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Agent 更新提示 - 左下角 */}
+      {agentUpdateInfo?.hasUpdate && !showUpdateDialog && (
+        <div className="fixed bottom-4 left-4 z-50 animate-in slide-in-from-bottom-2 duration-300">
+          <div className="flex items-center gap-3 px-4 py-3 bg-primary/10 border border-primary/20 rounded-lg shadow-lg max-w-xs">
+            <Alert01Icon size={18} className="text-primary flex-shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-foreground">
+                {t("agent-update-available")}
+              </p>
+              <p className="text-xs text-muted-foreground truncate">
+                {t("new-agents-count", { count: agentUpdateInfo.newAgentNames.length })}
+              </p>
+            </div>
+            <div className="flex items-center gap-1">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-xs"
+                onClick={() => setShowUpdateDialog(true)}
+              >
+                {t("view-details")}
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6"
+                onClick={handleDismissUpdate}
+              >
+                <Cancel01Icon size={12} />
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Agent 更新详情弹窗 */}
+      <AlertDialog open={showUpdateDialog} onOpenChange={setShowUpdateDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("agent-update-title")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("agent-update-desc")}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="my-4 max-h-60 overflow-y-auto">
+            <div className="space-y-2">
+              {agentUpdateInfo?.newAgentNames.map((name) => (
+                <div
+                  key={name}
+                  className="flex items-center gap-2 px-3 py-2 rounded bg-muted/50"
+                >
+                  <CheckmarkCircle02Icon size={14} className="text-green-500" />
+                  <span className="text-sm">{name}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={handleDismissUpdate}>
+              {t("later")}
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleApplyUpdate}
+              disabled={applyingUpdate}
+            >
+              {applyingUpdate ? (
+                <>
+                  <Loading03Icon size={14} className="mr-2 animate-spin" />
+                  {t("applying")}
+                </>
+              ) : (
+                t("apply-update")
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <Toaster />
     </div>
   )

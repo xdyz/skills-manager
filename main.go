@@ -20,6 +20,7 @@ func main() {
 	app := backend.NewApp()
 	folderService := services.NewFolderService()
 	skillsService := services.NewSkillsService()
+	agentService := services.NewAgentService()
 	envService := services.NewEnvService()
 
 	// Create application with options
@@ -35,12 +36,14 @@ func main() {
 			app.Startup(ctx)
 			folderService.Startup(ctx)
 			skillsService.Startup(ctx)
+			agentService.Startup(ctx)
 			envService.Startup(ctx)
 		},
 		Bind: []interface{}{
 			app,
 			folderService,
 			skillsService,
+			agentService,
 			envService,
 		},
 		// 👇 添加调试配置

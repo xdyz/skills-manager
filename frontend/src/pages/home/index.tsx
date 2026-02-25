@@ -1,116 +1,157 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { useNavigate } from "react-router-dom"
 import { useTranslation } from "react-i18next"
-import { 
-  ChartHistogramIcon,
-  LinkSquare01Icon,
-  Globe02Icon,
+import {
   ArrowRight02Icon,
+  CodeIcon,
+  UserMultipleIcon,
+  LinkSquare01Icon,
+  Folder01Icon,
+  RefreshIcon,
+  ChartHistogramIcon,
+  Globe02Icon,
+  Settings02Icon,
 } from "hugeicons-react"
 import Logo from "@/components/Logo"
 import { GetAllAgentSkills } from "@wailsjs/go/services/SkillsService"
+import { GetSupportedAgents } from "@wailsjs/go/services/AgentService"
+import { GetFolders } from "@wailsjs/go/services/FolderService"
+
+interface AgentInfo {
+  name: string
+  localPath: string
+  isCustom: boolean
+}
+
+interface SkillData {
+  name: string
+  desc: string
+  path: string
+  language: string
+  framework: string
+  agents: string[]
+  source: string
+}
 
 const HomePage = () => {
   const navigate = useNavigate()
   const { t } = useTranslation()
-  const [skillCount, setSkillCount] = useState(0)
-  const [agentCount, setAgentCount] = useState(0)
+  const [skills, setSkills] = useState<SkillData[]>([])
+  const [agents, setAgents] = useState<AgentInfo[]>([])
+  const [projectCount, setProjectCount] = useState(0)
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    loadStats()
+    loadData()
   }, [])
 
-  const loadStats = async () => {
+  const loadData = async () => {
+    setLoading(true)
     try {
-      const skills = await GetAllAgentSkills()
-      if (skills) {
-        setSkillCount(skills.length)
-        const agents = new Set<string>()
-        skills.forEach((s: any) => s.agents?.forEach((a: string) => agents.add(a)))
-        setAgentCount(agents.size)
-      }
+      const [skillList, agentList, folders] = await Promise.all([
+        GetAllAgentSkills(),
+        GetSupportedAgents(),
+        GetFolders(),
+      ])
+      setSkills(skillList || [])
+      setAgents(agentList || [])
+      setProjectCount(folders?.length || 0)
     } catch {}
+    setLoading(false)
   }
 
+  const totalLinks = useMemo(() => {
+    let count = 0
+    skills.forEach((s) => { count += s.agents?.length || 0 })
+    return count
+  }, [skills])
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <RefreshIcon size={24} className="animate-spin text-muted-foreground" />
+      </div>
+    )
+  }
+
+  const statsCards = [
+    { label: t("installed-skills"), value: skills.length, icon: CodeIcon, color: "primary", hoverBorder: "hover:border-primary/30", route: "/skills" },
+    { label: t("linked-agents"), value: agents.length, icon: UserMultipleIcon, color: "blue-500", hoverBorder: "hover:border-blue-400/30", route: "/agents" },
+    { label: t("home-total-links"), value: totalLinks, icon: LinkSquare01Icon, color: "amber-500", hoverBorder: "hover:border-amber-400/30", route: undefined },
+    { label: t("projects"), value: projectCount, icon: Folder01Icon, color: "violet-500", hoverBorder: "hover:border-violet-400/30", route: "/projects" },
+  ]
+
+  const quickActions = [
+    { label: t("manage-local-skills"), desc: t("manage-local-skills-desc"), icon: ChartHistogramIcon, color: "primary", hoverBorder: "hover:border-primary/25", route: "/skills" },
+    { label: t("search-remote-skills"), desc: t("search-remote-skills-desc"), icon: Globe02Icon, color: "blue-500", hoverBorder: "hover:border-blue-400/25", route: "/skills?action=install" },
+    { label: t("agent-management"), desc: t("agent-management-desc"), icon: Settings02Icon, color: "amber-500", hoverBorder: "hover:border-amber-400/25", route: "/agents" },
+  ]
+
   return (
-    <div className="max-w-2xl mx-auto space-y-8 pt-12 p-6 overflow-y-auto h-full">
-      {/* Welcome */}
-      <div className="text-center space-y-4">
-        <div className="inline-flex p-3 rounded-md bg-primary/8">
-          <Logo size={40} className="mx-auto" />
-        </div>
-        <div className="space-y-2">
-          <h1 className="text-xl font-semibold tracking-tight text-foreground/90">Skills Manager</h1>
-          <p className="text-[13px] text-muted-foreground leading-relaxed">
-            {t("home-subtitle")}
-          </p>
-        </div>
-      </div>
+    <div className="h-full flex flex-col items-center justify-center p-6">
+      <div className="w-full max-w-3xl space-y-8">
 
-      {/* Stats */}
-      <div className="grid grid-cols-2 gap-3">
-        <div className="rounded-md bg-primary/6 border border-primary/10 p-4 text-center">
-          <p className="text-2xl font-semibold text-primary">{skillCount}</p>
-          <p className="text-[11px] text-muted-foreground mt-1">{t("installed-skills")}</p>
-        </div>
-        <div className="rounded-md bg-primary/6 border border-primary/10 p-4 text-center">
-          <p className="text-2xl font-semibold text-primary">{agentCount}</p>
-          <p className="text-[11px] text-muted-foreground mt-1">{t("linked-agents")}</p>
-        </div>
-      </div>
-
-      {/* Quick Actions */}
-      <div className="space-y-3">
-        <h2 className="text-[11px] font-medium uppercase tracking-widest text-muted-foreground/60 px-1">{t("quick-actions")}</h2>
-        <div className="space-y-2">
-          <div 
-            className="flex items-center justify-between p-3.5 rounded-md border border-border/60 bg-card cursor-pointer transition-all duration-200 hover:shadow-sm hover:border-primary/25 group"
-            onClick={() => navigate("/skills")}
-          >
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded bg-primary/8">
-                <ChartHistogramIcon size={17} className="text-primary" />
-              </div>
-              <div>
-                <p className="text-[13px] font-medium text-foreground/90 whitespace-nowrap">{t("manage-local-skills")}</p>
-                <p className="text-[11px] text-muted-foreground mt-0.5 whitespace-nowrap">{t("manage-local-skills-desc")}</p>
-              </div>
-            </div>
-            <ArrowRight02Icon size={15} className="text-muted-foreground/30 group-hover:text-primary transition-colors" />
-          </div>
-
-          <div 
-            className="flex items-center justify-between p-3.5 rounded-md border border-border/60 bg-card cursor-pointer transition-all duration-200 hover:shadow-sm hover:border-blue-400/25 group"
-            onClick={() => navigate("/skills?action=install")}
-          >
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded bg-blue-500/8">
-                <Globe02Icon size={17} className="text-blue-500" />
-              </div>
-              <div>
-                <p className="text-[13px] font-medium text-foreground/90 whitespace-nowrap">{t("search-remote-skills")}</p>
-                <p className="text-[11px] text-muted-foreground mt-0.5 whitespace-nowrap">{t("search-remote-skills-desc")}</p>
-              </div>
-            </div>
-            <ArrowRight02Icon size={15} className="text-muted-foreground/30 group-hover:text-blue-500 transition-colors" />
-          </div>
-
-          <div 
-            className="flex items-center justify-between p-3.5 rounded-md border border-border/60 bg-card cursor-pointer transition-all duration-200 hover:shadow-sm hover:border-amber-400/25 group"
-            onClick={() => navigate("/skills?tab=agents")}
-          >
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded bg-amber-500/8">
-                <LinkSquare01Icon size={17} className="text-amber-500" />
-              </div>
-              <div>
-                <p className="text-[13px] font-medium text-foreground/90 whitespace-nowrap">{t("config-agent-links")}</p>
-                <p className="text-[11px] text-muted-foreground mt-0.5 whitespace-nowrap">{t("config-agent-links-desc")}</p>
-              </div>
-            </div>
-            <ArrowRight02Icon size={15} className="text-muted-foreground/30 group-hover:text-amber-500 transition-colors" />
+        {/* Header */}
+        <div className="flex items-center gap-3">
+          <Logo size={44} showBackground />
+          <div>
+            <h1 className="text-lg font-semibold tracking-tight text-foreground/90">Skills Manager</h1>
+            <p className="text-[12px] text-muted-foreground mt-0.5">{t("home-subtitle")}</p>
           </div>
         </div>
+
+        {/* Stats Grid - 2x2 */}
+        <div className="grid grid-cols-2 gap-4">
+          {statsCards.map((card) => {
+            const Icon = card.icon
+            return (
+              <div
+                key={card.label}
+                className={`relative overflow-hidden rounded-xl border border-border/60 bg-card p-5 transition-all duration-200 hover:shadow-md ${card.hoverBorder} ${card.route ? "cursor-pointer group" : ""}`}
+                onClick={() => card.route && navigate(card.route)}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className={`p-2.5 rounded-lg bg-${card.color}/10`}>
+                      <Icon size={18} className={`text-${card.color}`} />
+                    </div>
+                    <div>
+                      <p className="text-2xl font-bold text-foreground tracking-tight">{card.value}</p>
+                      <p className="text-[11.5px] text-muted-foreground mt-0.5">{card.label}</p>
+                    </div>
+                  </div>
+                  {card.route && (
+                    <ArrowRight02Icon size={14} className={`text-muted-foreground/25 group-hover:text-${card.color} transition-colors`} />
+                  )}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+
+        {/* Quick Actions */}
+        <div className="space-y-3">
+          <h3 className="text-[13px] font-medium text-muted-foreground/70 px-0.5">{t("quick-actions")}</h3>
+          <div className="grid grid-cols-3 gap-3">
+            {quickActions.map((action) => {
+              const Icon = action.icon
+              return (
+                <div
+                  key={action.label}
+                  className={`rounded-xl border border-border/60 bg-card p-4 cursor-pointer transition-all duration-200 hover:shadow-md ${action.hoverBorder} group`}
+                  onClick={() => navigate(action.route)}
+                >
+                  <div className={`p-2 rounded-lg bg-${action.color}/8 w-fit mb-3`}>
+                    <Icon size={16} className={`text-${action.color}`} />
+                  </div>
+                  <p className="text-[12.5px] font-medium text-foreground/85">{action.label}</p>
+                  <p className="text-[10.5px] text-muted-foreground/55 mt-1 line-clamp-2 leading-relaxed">{action.desc}</p>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+
       </div>
     </div>
   )

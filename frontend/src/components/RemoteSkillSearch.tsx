@@ -4,12 +4,14 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import {
   Search01Icon,
   CheckmarkCircle02Icon,
   Download01Icon,
   Globe02Icon,
   RefreshIcon,
+  InformationCircleIcon,
 } from "hugeicons-react"
 import { FindRemoteSkills } from "@wailsjs/go/services/SkillsService"
 import { BrowserOpenURL } from "@wailsjs/runtime/runtime"
@@ -23,6 +25,7 @@ export interface RemoteSkill {
   description: string
   installed: boolean
   installs: number
+  supportedAgents: string[]
 }
 
 interface RemoteSkillSearchProps {
@@ -146,12 +149,8 @@ const RemoteSkillSearch = ({
                     installed ? "bg-muted/40" : "hover:bg-accent/40"
                   }`}
                 >
-                  <div className={`p-2 rounded shrink-0 ${installed ? "bg-primary/8" : "bg-blue-500/8"}`}>
-                    {installed ? (
-                      <CheckmarkCircle02Icon size={18} className="text-primary" />
-                    ) : (
-                      <Globe02Icon size={18} className="text-blue-500" />
-                    )}
+                  <div className="p-2 rounded shrink-0 bg-blue-500/8">
+                    <Globe02Icon size={18} className="text-blue-500" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium truncate">{skill.name}</p>
@@ -164,6 +163,21 @@ const RemoteSkillSearch = ({
                           <Download01Icon size={10} />
                           {skill.installs.toLocaleString()}
                         </span>
+                      )}
+                      {skill.supportedAgents?.length > 0 && !skill.supportedAgents.includes("All Agents") && (
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className="inline-flex items-center gap-0.5 text-[10px] text-amber-600 dark:text-amber-400 cursor-help shrink-0">
+                                <InformationCircleIcon size={11} />
+                                {t("partial-support")}
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>{t("supported-agents")}: {skill.supportedAgents.join(", ")}</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
                       )}
                     </div>
                   </div>
@@ -201,8 +215,8 @@ const RemoteSkillSearch = ({
                   <CardHeader className="pb-3">
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex items-start gap-3 flex-1 min-w-0">
-                        <div className={`p-2 rounded shrink-0 ${installed ? "bg-primary/8" : "bg-blue-500/8"}`}>
-                          {installed ? <CheckmarkCircle02Icon size={18} className="text-primary" /> : <Globe02Icon size={18} className="text-blue-500" />}
+                        <div className="p-2 rounded shrink-0 bg-blue-500/8">
+                          <Globe02Icon size={18} className="text-blue-500" />
                         </div>
                         <div className="flex-1 min-w-0">
                           <CardTitle className="text-[13px] truncate">{skill.name}</CardTitle>
@@ -215,6 +229,15 @@ const RemoteSkillSearch = ({
                               </span>
                             )}
                           </div>
+                          {skill.supportedAgents?.length > 0 && !skill.supportedAgents.includes("All Agents") && (
+                            <div className="flex items-center gap-1 mt-1 flex-wrap">
+                              {skill.supportedAgents.map((agent) => (
+                                <Badge key={agent} variant="outline" className="text-[9px] px-1.5 py-0 h-4 font-normal text-amber-600 dark:text-amber-400 border-amber-300 dark:border-amber-600">
+                                  {agent}
+                                </Badge>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       </div>
                       {installed && <Badge variant="secondary" className="text-xs shrink-0 whitespace-nowrap">{t("installed")}</Badge>}

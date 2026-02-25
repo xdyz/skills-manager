@@ -4,13 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -25,7 +25,7 @@ type Skills struct {
 	Path      string   `json:"path"`
 	Language  string   `json:"language"`
 	Framework string   `json:"framework"`
-	Agents    []string `json:"agents"`  // 该 skill 存在于哪些 agent 目录
+	Agents    []string `json:"agents"` // 该 skill 存在于哪些 agent 目录
 	Source    string   `json:"source"` // 来源，例如: vercel-labs/agent-skills
 }
 
@@ -43,14 +43,15 @@ type ProjectSkill struct {
 
 // RemoteSkill 远程 skill 信息
 type RemoteSkill struct {
-	FullName    string `json:"fullName"`    // 例如: vercel-labs/agent-skills@vercel-react-best-practices
-	Owner       string `json:"owner"`       // 例如: vercel-labs
-	Repo        string `json:"repo"`        // 例如: agent-skills
-	Name        string `json:"name"`        // 例如: vercel-react-best-practices
-	URL         string `json:"url"`         // 例如: https://skills.sh/vercel-labs/agent-skills/vercel-react-best-practices
-	Description string `json:"description"` // 技能描述
-	Installed   bool   `json:"installed"`   // 是否已安装
-	Installs    int    `json:"installs"`    // 安装次数
+	FullName        string   `json:"fullName"`        // 例如: vercel-labs/agent-skills@vercel-react-best-practices
+	Owner           string   `json:"owner"`           // 例如: vercel-labs
+	Repo            string   `json:"repo"`            // 例如: agent-skills
+	Name            string   `json:"name"`            // 例如: vercel-react-best-practices
+	URL             string   `json:"url"`             // 例如: https://skills.sh/vercel-labs/agent-skills/vercel-react-best-practices
+	Description     string   `json:"description"`     // 技能描述
+	Installed       bool     `json:"installed"`       // 是否已安装
+	Installs        int      `json:"installs"`        // 安装次数
+	SupportedAgents []string `json:"supportedAgents"` // 支持的 agent 列表（通过检测仓库文件判断）
 }
 
 // SkillsLock .skills-lock 文件结构
@@ -61,202 +62,12 @@ type SkillsLock struct {
 
 // SkillLockEntry 单个 skill 的安装信息
 type SkillLockEntry struct {
-	Source      string `json:"source"`      // 例如: vercel-labs/agent-skills
-	SourceType  string `json:"sourceType"`  // 例如: github
-	SourceURL   string `json:"sourceUrl"`   // 例如: https://github.com/vercel-labs/agent-skills.git
-	SkillPath   string `json:"skillPath"`   // 例如: skills/react-best-practices/SKILL.md
+	Source      string `json:"source"`     // 例如: vercel-labs/agent-skills
+	SourceType  string `json:"sourceType"` // 例如: github
+	SourceURL   string `json:"sourceUrl"`  // 例如: https://github.com/vercel-labs/agent-skills.git
+	SkillPath   string `json:"skillPath"`  // 例如: skills/react-best-practices/SKILL.md
 	InstalledAt string `json:"installedAt"`
 	UpdatedAt   string `json:"updatedAt"`
-}
-
-// AgentConfig 定义 agent 的配置
-type AgentConfig struct {
-	Name       string // 显示名称
-	GlobalPath string // 全局路径（相对于 home 目录）
-	LocalPath  string // 项目内路径（相对于项目根目录）
-}
-
-// 支持的 agents 列表（从 npx skills 获取）
-var supportedAgents = []AgentConfig{
-	{"Amp", ".config/agents/skills", ".amp/skills"},
-	{"Kimi Code CLI", ".config/agents/skills", ".kimi/skills"},
-	{"Replit", ".config/agents/skills", ".replit/skills"},
-	{"Antigravity", ".gemini/antigravity/skills", ".gemini/skills"},
-	{"Augment", ".augment/skills", ".augment/skills"},
-	{"Claude Code", ".claude/skills", ".claude/skills"},
-	{"OpenClaw", ".moltbot/skills", ".moltbot/skills"},
-	{"Cline", ".cline/skills", ".cline/skills"},
-	{"CodeBuddy", ".codebuddy/skills", ".codebuddy/skills"},
-	{"Codex", ".codex/skills", ".codex/skills"},
-	{"Command Code", ".commandcode/skills", ".commandcode/skills"},
-	{"Continue", ".continue/skills", ".continue/skills"},
-	{"Crush", ".config/crush/skills", ".crush/skills"},
-	{"Cursor", ".cursor/skills", ".cursor/skills"},
-	{"Droid", ".factory/skills", ".factory/skills"},
-	{"Gemini CLI", ".gemini/skills", ".gemini/skills"},
-	{"GitHub Copilot", ".copilot/skills", ".copilot/skills"},
-	{"Goose", ".config/goose/skills", ".goose/skills"},
-	{"Junie", ".junie/skills", ".junie/skills"},
-	{"iFlow CLI", ".iflow/skills", ".iflow/skills"},
-	{"Kilo Code", ".kilocode/skills", ".kilocode/skills"},
-	{"Kiro CLI", ".kiro/skills", ".kiro/skills"},
-	{"Kode", ".kode/skills", ".kode/skills"},
-	{"MCPJam", ".mcpjam/skills", ".mcpjam/skills"},
-	{"Mistral Vibe", ".vibe/skills", ".vibe/skills"},
-	{"Mux", ".mux/skills", ".mux/skills"},
-	{"OpenCode", ".config/opencode/skills", ".opencode/skills"},
-	{"OpenHands", ".openhands/skills", ".openhands/skills"},
-	{"Pi", ".pi/agent/skills", ".pi/skills"},
-	{"Qoder", ".qoder/skills", ".qoder/skills"},
-	{"Qwen Code", ".qwen/skills", ".qwen/skills"},
-	{"Roo Code", ".roo/skills", ".roo/skills"},
-	{"Trae", ".trae/skills", ".trae/skills"},
-	{"Trae CN", ".trae-cn/skills", ".trae-cn/skills"},
-	{"Windsurf", ".codeium/windsurf/skills", ".windsurf/skills"},
-	{"Zencoder", ".zencoder/skills", ".zencoder/skills"},
-	{"Neovate", ".neovate/skills", ".neovate/skills"},
-	{"Pochi", ".pochi/skills", ".pochi/skills"},
-	{"AdaL", ".adal/skills", ".adal/skills"},
-}
-
-// AgentInfo 返回给前端的 agent 信息
-type AgentInfo struct {
-	Name      string `json:"name"`
-	LocalPath string `json:"localPath"`
-	IsCustom  bool   `json:"isCustom"`
-}
-
-// CustomAgentConfig 用户自定义的 agent 配置（持久化到文件）
-type CustomAgentConfig struct {
-	Name       string `json:"name"`
-	GlobalPath string `json:"globalPath"`
-	LocalPath  string `json:"localPath"`
-}
-
-// getCustomAgentsFilePath 获取自定义 agent 配置文件路径
-func getCustomAgentsFilePath() (string, error) {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
-	}
-	configDir := filepath.Join(homeDir, ".config", "skills-manager")
-	if err := os.MkdirAll(configDir, 0755); err != nil {
-		return "", err
-	}
-	return filepath.Join(configDir, "custom-agents.json"), nil
-}
-
-// loadCustomAgents 从配置文件加载自定义 agent 列表
-func loadCustomAgents() ([]CustomAgentConfig, error) {
-	filePath, err := getCustomAgentsFilePath()
-	if err != nil {
-		return nil, err
-	}
-	data, err := os.ReadFile(filePath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return []CustomAgentConfig{}, nil
-		}
-		return nil, err
-	}
-	var agents []CustomAgentConfig
-	if err := json.Unmarshal(data, &agents); err != nil {
-		return []CustomAgentConfig{}, nil
-	}
-	return agents, nil
-}
-
-// saveCustomAgents 保存自定义 agent 列表到配置文件
-func saveCustomAgents(agents []CustomAgentConfig) error {
-	filePath, err := getCustomAgentsFilePath()
-	if err != nil {
-		return err
-	}
-	data, err := json.MarshalIndent(agents, "", "  ")
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(filePath, data, 0644)
-}
-
-// getAllAgentConfigs 获取所有 agent 配置（内置 + 自定义）
-func getAllAgentConfigs() []AgentConfig {
-	all := make([]AgentConfig, len(supportedAgents))
-	copy(all, supportedAgents)
-	customs, err := loadCustomAgents()
-	if err == nil {
-		for _, c := range customs {
-			all = append(all, AgentConfig{Name: c.Name, GlobalPath: c.GlobalPath, LocalPath: c.LocalPath})
-		}
-	}
-	return all
-}
-
-// GetSupportedAgents 返回所有支持的 agent 列表（内置 + 自定义）
-func (ss *SkillsService) GetSupportedAgents() []AgentInfo {
-	customs, _ := loadCustomAgents()
-	customNames := make(map[string]bool)
-	for _, c := range customs {
-		customNames[c.Name] = true
-	}
-
-	allConfigs := getAllAgentConfigs()
-	agents := make([]AgentInfo, len(allConfigs))
-	for i, a := range allConfigs {
-		agents[i] = AgentInfo{Name: a.Name, LocalPath: a.LocalPath, IsCustom: customNames[a.Name]}
-	}
-	return agents
-}
-
-// AddCustomAgent 添加自定义 agent（路径根据名称自动生成）
-func (ss *SkillsService) AddCustomAgent(name string) error {
-	if name == "" {
-		return fmt.Errorf("名称不能为空")
-	}
-	// 将名称转为小写、用连字符替换空格作为路径段
-	pathSegment := strings.ToLower(strings.ReplaceAll(strings.TrimSpace(name), " ", "-"))
-	globalPath := "." + pathSegment + "/skills"
-	localPath := "." + pathSegment + "/skills"
-
-	// 检查是否与内置 agent 重名
-	for _, a := range supportedAgents {
-		if strings.EqualFold(a.Name, name) {
-			return fmt.Errorf("与内置 Agent \"%s\" 名称冲突", a.Name)
-		}
-	}
-	customs, err := loadCustomAgents()
-	if err != nil {
-		return fmt.Errorf("读取配置失败: %v", err)
-	}
-	// 检查自定义列表中是否已存在
-	for _, c := range customs {
-		if strings.EqualFold(c.Name, name) {
-			return fmt.Errorf("自定义 Agent \"%s\" 已存在", name)
-		}
-	}
-	customs = append(customs, CustomAgentConfig{Name: name, GlobalPath: globalPath, LocalPath: localPath})
-	return saveCustomAgents(customs)
-}
-
-// RemoveCustomAgent 删除自定义 agent
-func (ss *SkillsService) RemoveCustomAgent(name string) error {
-	customs, err := loadCustomAgents()
-	if err != nil {
-		return fmt.Errorf("读取配置失败: %v", err)
-	}
-	found := false
-	result := make([]CustomAgentConfig, 0, len(customs))
-	for _, c := range customs {
-		if c.Name == name {
-			found = true
-			continue
-		}
-		result = append(result, c)
-	}
-	if !found {
-		return fmt.Errorf("未找到自定义 Agent \"%s\"", name)
-	}
-	return saveCustomAgents(result)
 }
 
 func NewSkillsService() *SkillsService {
@@ -272,20 +83,6 @@ func (ss *SkillsService) Startup(ctx context.Context) {
 // shellRun 通过用户的 interactive login shell 执行命令，确保 GUI 应用能继承完整的 shell 环境
 // macOS GUI 应用不会加载 .zshrc，而 nvm 等工具的初始化脚本通常在 .zshrc 中
 // 使用 -i（interactive）确保 .zshrc 被加载，-l（login）确保 .zprofile 被加载
-// httpGet 发送 HTTP GET 请求并返回响应体
-func httpGet(url string) ([]byte, error) {
-	client := &http.Client{Timeout: 15 * time.Second}
-	resp, err := client.Get(url)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("HTTP %d", resp.StatusCode)
-	}
-	return io.ReadAll(resp.Body)
-}
-
 func shellRun(command string) ([]byte, error) {
 	return exec.Command("/bin/zsh", "-li", "-c", command).CombinedOutput()
 }
@@ -340,7 +137,7 @@ func (ss *SkillsService) GetAllAgentSkills() ([]Skills, error) {
 		// 遍历每个 skill 文件夹
 		for _, entry := range entries {
 			skillName := entry.Name()
-			
+
 			// 跳过隐藏文件
 			if strings.HasPrefix(skillName, ".") {
 				continue
@@ -359,7 +156,7 @@ func (ss *SkillsService) GetAllAgentSkills() ([]Skills, error) {
 				continue
 			}
 
-			// 读取 SKILL.md
+			// 读取 SKILL.md（只支持新格式）
 			skillMdPath := filepath.Join(skillPath, "SKILL.md")
 			content, err := os.ReadFile(skillMdPath)
 			if err != nil {
@@ -532,9 +329,7 @@ func (ss *SkillsService) GetProjectSkills(projectPath string) ([]ProjectSkill, e
 				Agents:    []string{agent.Name},
 				IsGlobal:  isGlobal,
 			}
-			if parsed.Name != "" {
-				skill.Name = parsed.Name
-			}
+			// 不用 parsed.Name 覆盖，始终使用目录名以匹配远程 skill name
 			// 从全局 .skills-lock 填充 source
 			if globalLock.Skills != nil {
 				if lockEntry, ok := globalLock.Skills[skillName]; ok {
@@ -579,10 +374,10 @@ func (ss *SkillsService) FindRemoteSkills(query string) ([]RemoteSkill, error) {
 	// 解析 API 响应
 	var apiResp struct {
 		Skills []struct {
-			ID      string `json:"id"`
-			Name    string `json:"name"`
-			Source  string `json:"source"`
-			Installs int   `json:"installs"`
+			ID       string `json:"id"`
+			Name     string `json:"name"`
+			Source   string `json:"source"`
+			Installs int    `json:"installs"`
 		} `json:"skills"`
 		Count int `json:"count"`
 	}
@@ -637,6 +432,9 @@ func (ss *SkillsService) FindRemoteSkills(query string) ([]RemoteSkill, error) {
 		}
 	}
 
+	// 并发检测每个 skill 支持哪些 agent
+	checkSkillSupportedAgents(skills)
+
 	fmt.Printf("找到 %d 个远程 skills\n", len(skills))
 	return skills, nil
 }
@@ -673,15 +471,91 @@ func (ss *SkillsService) findRemoteSkillsFallback(query string) ([]RemoteSkill, 
 		}
 	}
 
+	// 并发检测每个 skill 支持哪些 agent
+	checkSkillSupportedAgents(skills)
+
 	return skills, nil
+}
+
+// agentFileMapping 定义仓库文件名到支持的 agent 的映射
+var agentFileMapping = []struct {
+	FileName string
+	Agent    string
+}{
+	{"SKILL.md", "All Agents"},
+	{"CLAUDE.md", "Claude Code"},
+	{"AGENTS.md", "GitHub Copilot"},
+	{".cursorrules", "Cursor"},
+	{".windsurfrules", "Windsurf"},
+}
+
+// checkSkillSupportedAgents 并发检测每个 skill 支持哪些 agent
+// 通过 GitHub raw URL 的 HEAD 请求检测仓库中有哪些格式文件
+func checkSkillSupportedAgents(skills []RemoteSkill) {
+	if len(skills) == 0 {
+		return
+	}
+	var wg sync.WaitGroup
+	client := &http.Client{Timeout: 5 * time.Second}
+
+	for i := range skills {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			s := &skills[idx]
+			if s.Owner == "" || s.Repo == "" || s.Name == "" {
+				return
+			}
+
+			var mu sync.Mutex
+			var innerWg sync.WaitGroup
+
+			for _, mapping := range agentFileMapping {
+				innerWg.Add(1)
+				go func(fileName, agentName string) {
+					defer innerWg.Done()
+					// 尝试常见路径
+					paths := []string{
+						fmt.Sprintf("https://raw.githubusercontent.com/%s/%s/main/skills/%s/%s", s.Owner, s.Repo, s.Name, fileName),
+						fmt.Sprintf("https://raw.githubusercontent.com/%s/%s/main/%s/%s", s.Owner, s.Repo, s.Name, fileName),
+					}
+					// 根目录只对单 skill 仓库检查
+					if fileName == "SKILL.md" || fileName == "CLAUDE.md" || fileName == "AGENTS.md" {
+						paths = append(paths, fmt.Sprintf("https://raw.githubusercontent.com/%s/%s/main/%s", s.Owner, s.Repo, fileName))
+					}
+					for _, url := range paths {
+						resp, err := client.Head(url)
+						if err == nil {
+							resp.Body.Close()
+							if resp.StatusCode == 200 {
+								mu.Lock()
+								s.SupportedAgents = append(s.SupportedAgents, agentName)
+								mu.Unlock()
+								return
+							}
+						}
+					}
+				}(mapping.FileName, mapping.Agent)
+			}
+			innerWg.Wait()
+
+			if len(s.SupportedAgents) == 0 {
+				fmt.Printf("  ⚠ %s: 未检测到支持的 agent 文件\n", s.FullName)
+			} else {
+				fmt.Printf("  ✓ %s: 支持 %v\n", s.FullName, s.SupportedAgents)
+			}
+		}(i)
+	}
+	wg.Wait()
 }
 
 // parseRemoteSkillsOutput 解析 npx skills find 或 find-skills-plus 的输出
 // find-skills-plus 输出格式：
-//   owner/repo@skill-name          （加粗）
-//   └ https://skills.sh/owner/repo/skill-name （蓝色）
-//   描述文本                         （灰色）
-//   （空行分隔下一个 skill）
+//
+//	owner/repo@skill-name          （加粗）
+//	└ https://skills.sh/owner/repo/skill-name （蓝色）
+//	描述文本                         （灰色）
+//	（空行分隔下一个 skill）
 func parseRemoteSkillsOutput(output string) []RemoteSkill {
 	var skills []RemoteSkill
 
@@ -788,7 +662,7 @@ func (ss *SkillsService) InstallRemoteSkill(fullName string, agents []string) er
 
 	// 解析 owner/repo
 	ownerRepo := parts[0]
-	
+
 	// 使用 git clone 直接下载到目标位置
 	// 格式: https://github.com/owner/repo.git
 	repoURL := fmt.Sprintf("https://github.com/%s.git", ownerRepo)
@@ -1470,61 +1344,84 @@ func (ss *SkillsService) InstallRemoteSkillToProject(projectPath string, fullNam
 	return nil
 }
 
+// hasSkillMd 检查目录下是否有 SKILL.md 文件
+func hasSkillMd(dir string) bool {
+	_, err := os.Stat(filepath.Join(dir, "SKILL.md"))
+	return err == nil
+}
+
 // findSkillInRepo 在仓库中查找 skill 目录，支持多种目录结构
+// skillName 可能与仓库内目录名不完全匹配（例如 API 返回 "vercel-react-best-practices"
+// 但仓库内目录名是 "react-best-practices"），所以需要后缀匹配。
 func findSkillInRepo(repoDir string, skillName string) string {
-	// 1. 直接在根目录查找: repo/skill-name/
+	// 1. 精确匹配：直接在根目录查找 repo/skill-name/
 	candidate := filepath.Join(repoDir, skillName)
 	if info, err := os.Stat(candidate); err == nil && info.IsDir() {
-		return candidate
+		// 优先返回有 SKILL.md 的目录
+		if hasSkillMd(candidate) {
+			return candidate
+		}
 	}
 
-	// 2. 在 skills/ 子目录查找: repo/skills/skill-name/
+	// 2. 精确匹配：在 skills/ 子目录查找 repo/skills/skill-name/
 	candidate = filepath.Join(repoDir, "skills", skillName)
 	if info, err := os.Stat(candidate); err == nil && info.IsDir() {
 		return candidate
 	}
 
-	// 3. 如果仓库根目录下有 .md 文件（说明整个仓库就是一个 skill），直接使用仓库根目录
-	entries, err := os.ReadDir(repoDir)
-	if err == nil {
-		hasSkillFile := false
+	// 3. 仓库根目录有 SKILL.md → 整个仓库就是一个 skill
+	if hasSkillMd(repoDir) {
+		return repoDir
+	}
+
+	// 4. 后缀匹配：在 skills/ 目录下查找名称后缀匹配的目录（优先有 SKILL.md 的）
+	// 例如 skillName="vercel-react-best-practices" 匹配目录 "react-best-practices"
+	skillsDir := filepath.Join(repoDir, "skills")
+	if entries, err := os.ReadDir(skillsDir); err == nil {
 		for _, entry := range entries {
-			name := entry.Name()
-			if strings.HasSuffix(name, ".md") && !entry.IsDir() && name != "README.md" && name != "CHANGELOG.md" && name != "LICENSE.md" {
-				hasSkillFile = true
-				break
+			if !entry.IsDir() || strings.HasPrefix(entry.Name(), ".") {
+				continue
 			}
-		}
-		if hasSkillFile {
-			return repoDir
+			if strings.HasSuffix(skillName, entry.Name()) || strings.HasSuffix(entry.Name(), skillName) {
+				return filepath.Join(skillsDir, entry.Name())
+			}
 		}
 	}
 
-	// 4. 递归查找：在所有子目录中查找名称匹配的目录
-	var found string
+	// 5. 递归查找：精确名称匹配或后缀匹配，优先有 SKILL.md 的
+	var exactFound string
+	var suffixFound string
 	filepath.WalkDir(repoDir, func(path string, d os.DirEntry, err error) error {
-		if err != nil || !d.IsDir() {
+		if err != nil || !d.IsDir() || path == repoDir {
 			return nil
 		}
-		// 跳过 .git 目录
-		if d.Name() == ".git" {
+		if d.Name() == ".git" || d.Name() == ".github" {
 			return filepath.SkipDir
 		}
-		if d.Name() == skillName && path != repoDir {
-			found = path
+		dirName := d.Name()
+		if dirName == skillName {
+			exactFound = path
 			return filepath.SkipAll
+		}
+		if suffixFound == "" && (strings.HasSuffix(skillName, dirName) || strings.HasSuffix(dirName, skillName)) {
+			if hasSkillMd(path) {
+				suffixFound = path
+			}
 		}
 		return nil
 	})
-	if found != "" {
-		return found
+	if exactFound != "" {
+		return exactFound
+	}
+	if suffixFound != "" {
+		return suffixFound
 	}
 
-	// 5. 如果仓库只有一个子目录（且不是 .git），可能就是 skill
-	if entries != nil {
+	// 6. 如果仓库只有一个非隐藏子目录，可能就是 skill
+	if entries, err := os.ReadDir(repoDir); err == nil {
 		var dirs []os.DirEntry
 		for _, entry := range entries {
-			if entry.IsDir() && entry.Name() != ".git" && !strings.HasPrefix(entry.Name(), ".") {
+			if entry.IsDir() && !strings.HasPrefix(entry.Name(), ".") {
 				dirs = append(dirs, entry)
 			}
 		}
@@ -1572,9 +1469,9 @@ func (ss *SkillsService) RemoveSkillFromProject(projectPath string, skillName st
 // updateSkillsLock 更新 .skills-lock 文件
 func (ss *SkillsService) updateSkillsLock(skillsDir, skillName, source string) error {
 	lockPath := filepath.Join(skillsDir, ".skills-lock")
-	
+
 	var lock SkillsLock
-	
+
 	// 读取现有的 lock 文件
 	if data, err := os.ReadFile(lockPath); err == nil {
 		json.Unmarshal(data, &lock)
@@ -1585,7 +1482,7 @@ func (ss *SkillsService) updateSkillsLock(skillsDir, skillName, source string) e
 			Skills:  make(map[string]SkillLockEntry),
 		}
 	}
-	
+
 	// 添加或更新 skill 信息
 	now := time.Now().Format(time.RFC3339)
 	entry := SkillLockEntry{
@@ -1594,7 +1491,7 @@ func (ss *SkillsService) updateSkillsLock(skillsDir, skillName, source string) e
 		SourceURL:  fmt.Sprintf("https://github.com/%s.git", source),
 		SkillPath:  fmt.Sprintf("skills/%s/SKILL.md", skillName),
 	}
-	
+
 	// 如果是新安装，设置 InstalledAt
 	if existingEntry, exists := lock.Skills[skillName]; exists {
 		entry.InstalledAt = existingEntry.InstalledAt
@@ -1602,14 +1499,14 @@ func (ss *SkillsService) updateSkillsLock(skillsDir, skillName, source string) e
 		entry.InstalledAt = now
 	}
 	entry.UpdatedAt = now
-	
+
 	lock.Skills[skillName] = entry
-	
+
 	// 写回文件
 	data, err := json.MarshalIndent(lock, "", "  ")
 	if err != nil {
 		return err
 	}
-	
+
 	return os.WriteFile(lockPath, data, 0644)
 }

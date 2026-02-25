@@ -27,7 +27,8 @@ const zh = {
 
     // Layout
     home: "首页",
-    skills: "Skills 技能",
+    skills: "Skills",
+    agents: "Agents",
     projects: "项目",
     "add-project": "点击 + 添加项目",
     "confirm-remove-project": "确认移除项目",
@@ -38,7 +39,7 @@ const zh = {
     // Home
     "home-subtitle": "统一管理 Agent Skills，一键安装、链接到多个 AI Agent",
     "installed-skills": "已安装技能",
-    "linked-agents": "已链接 Agent",
+    "linked-agents": "Agent 数量",
     "quick-actions": "快捷操作",
     "manage-local-skills": "管理本地技能",
     "manage-local-skills-desc": "查看、更新或删除已安装的技能",
@@ -46,6 +47,15 @@ const zh = {
     "search-remote-skills-desc": "从 skills.sh 搜索并安装新技能",
     "config-agent-links": "配置 Agent 链接",
     "config-agent-links-desc": "管理技能与 Agent 之间的软链接",
+    "home-refresh": "刷新",
+    "home-total-links": "总链接数",
+    "home-recent-skills": "已安装技能",
+    "home-view-all": "查看全部",
+    "home-link-coverage": "链接覆盖率",
+    "home-avg-links": "平均 {{count}} 个链接/技能",
+    "home-coverage-desc": "{{links}} / {{max}} 个可能的链接",
+    "home-top-agents": "链接最多的 Agent",
+    "home-skill-tags": "技能标签",
 
     // Setup
     "setup-deps-required": "应用需要以下依赖才能正常运行，请确保它们已安装",
@@ -61,11 +71,12 @@ const zh = {
     "enter-app": "进入应用 →",
 
     // Skills Page
-    "skills-management": "技能管理",
+    "skills-management": "Skills 管理",
     "skills-management-desc": "管理本地技能和搜索远程技能",
     "local-skills": "本地技能",
     "remote-search": "远程搜索",
     "agent-management": "Agent 管理",
+    "agent-management-desc": "管理支持的 AI Agent 列表，添加自定义 Agent",
     "search-local-skills": "搜索本地技能...",
     "search-remote-skills-placeholder": "搜索远程技能 (例如: react, vue, typescript)...",
     "search-agent": "搜索 Agent...",
@@ -86,6 +97,10 @@ const zh = {
     "config-agent-link": "配置 Agent 链接",
     "no-matching-agent": "未找到匹配的 Agent",
     "no-agents": "暂无 Agent",
+    "legacy-skill-tooltip": "此 Skill 仅支持部分 Agent",
+    "not-compatible": "不兼容",
+    "partial-support": "部分支持",
+    "supported-agents": "支持的 Agent",
 
     // Agent select dialog
     "select-target-agent": "选择目标 Agent",
@@ -156,8 +171,36 @@ const zh = {
     removing: "移除中...",
     "confirm-remove-btn": "确认移除",
     "config-project-agent-link-desc": "选择要将 Skill \"{{name}}\" 复制到哪些 Agent 目录",
+    "project-agents": "项目 Agent",
+    "project-agents-count": "{{count}} 个 Agent",
+    "no-project-agents": "项目中没有检测到 Agent 目录",
+    "all-agents": "全部 Agent",
+    "project-skills-tab": "Skills 技能",
+    "project-agents-tab": "Agent 管理",
+    "agent-enabled": "已启用",
+    "agent-disabled": "未启用",
+    "toast-agent-enabled": "已在项目中启用 Agent \"{{name}}\"",
+    "toast-agent-disabled": "已在项目中禁用 Agent \"{{name}}\"",
+    "toast-agent-toggle-failed": "操作失败: {{error}}",
+    "agent-not-empty-hint": "目录非空，无法直接禁用。请先移除目录内的 Skills。",
+    "confirm-disable-agent-title": "确认禁用 Agent",
+    "confirm-disable-agent-desc": "Agent \"{{name}}\" 目录下有 {{count}} 个 Skill，是否强制禁用并删除所有 Skill？",
+    "confirm-disable-agent-note": "此操作将删除该 Agent 目录下所有的 Skill 文件/软链接。",
+    "force-disable": "强制禁用",
     "toast-project-skill-installed": "Skill \"{{name}}\" 已安装到 {{count}} 个 Agent（仅项目可用）",
     "toast-project-skill-removed": "Skill \"{{name}}\" 已从项目中移除",
+
+    // Agent update
+    "agent-update-available": "发现新 Agent",
+    "new-agents-count": "有 {{count}} 个新 Agent 可用",
+    "agent-update-title": "Agent 列表更新",
+    "agent-update-desc": "官方 Skills CLI 新增了以下 Agent 支持，是否添加到本地？",
+    "later": "稍后再说",
+    "apply-update": "添加到本地",
+    "applying": "添加中...",
+    "toast-agent-update-applied": "已成功添加 {{count}} 个新 Agent",
+    "toast-agent-update-failed": "添加失败: {{error}}",
+    "check-update-failed": "检查更新失败",
   },
 }
 
