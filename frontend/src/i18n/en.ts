@@ -189,18 +189,6 @@ const en = {
     "force-disable": "Force Disable",
     "toast-project-skill-installed": "Skill \"{{name}}\" installed to {{count}} Agent(s) (project only)",
     "toast-project-skill-removed": "Skill \"{{name}}\" removed from project",
-
-    // Agent update
-    "agent-update-available": "New Agents Available",
-    "new-agents-count": "{{count}} new Agent(s) available",
-    "agent-update-title": "Agent List Update",
-    "agent-update-desc": "The official Skills CLI has added support for the following Agents. Add them locally?",
-    "later": "Later",
-    "apply-update": "Add to Local",
-    "applying": "Adding...",
-    "toast-agent-update-applied": "Successfully added {{count}} new Agent(s)",
-    "toast-agent-update-failed": "Failed to add: {{error}}",
-    "check-update-failed": "Check update failed",
   },
 }
 

@@ -5,17 +5,9 @@ import {context} from '../models';
 
 export function AddCustomAgent(arg1:string):Promise<void>;
 
-export function ApplyAgentUpdates():Promise<void>;
-
-export function CheckAgentUpdates():Promise<services.AgentUpdateInfo>;
-
 export function DisableProjectAgent(arg1:string,arg2:string,arg3:boolean):Promise<void>;
 
-export function DismissAgentUpdate():Promise<void>;
-
 export function EnableProjectAgent(arg1:string,arg2:string):Promise<void>;
-
-export function GetAgentUpdateCache():Promise<services.AgentUpdateCache>;
 
 export function GetProjectAgentSkillCount(arg1:string,arg2:string):Promise<number>;
 

@@ -189,18 +189,6 @@ const zh = {
     "force-disable": "强制禁用",
     "toast-project-skill-installed": "Skill \"{{name}}\" 已安装到 {{count}} 个 Agent（仅项目可用）",
     "toast-project-skill-removed": "Skill \"{{name}}\" 已从项目中移除",
-
-    // Agent update
-    "agent-update-available": "发现新 Agent",
-    "new-agents-count": "有 {{count}} 个新 Agent 可用",
-    "agent-update-title": "Agent 列表更新",
-    "agent-update-desc": "官方 Skills CLI 新增了以下 Agent 支持，是否添加到本地？",
-    "later": "稍后再说",
-    "apply-update": "添加到本地",
-    "applying": "添加中...",
-    "toast-agent-update-applied": "已成功添加 {{count}} 个新 Agent",
-    "toast-agent-update-failed": "添加失败: {{error}}",
-    "check-update-failed": "检查更新失败",
   },
 }
 

@@ -6,28 +6,12 @@ export function AddCustomAgent(arg1) {
   return window['go']['services']['AgentService']['AddCustomAgent'](arg1);
 }
 
-export function ApplyAgentUpdates() {
-  return window['go']['services']['AgentService']['ApplyAgentUpdates']();
-}
-
-export function CheckAgentUpdates() {
-  return window['go']['services']['AgentService']['CheckAgentUpdates']();
-}
-
 export function DisableProjectAgent(arg1, arg2, arg3) {
   return window['go']['services']['AgentService']['DisableProjectAgent'](arg1, arg2, arg3);
 }
 
-export function DismissAgentUpdate() {
-  return window['go']['services']['AgentService']['DismissAgentUpdate']();
-}
-
 export function EnableProjectAgent(arg1, arg2) {
   return window['go']['services']['AgentService']['EnableProjectAgent'](arg1, arg2);
-}
-
-export function GetAgentUpdateCache() {
-  return window['go']['services']['AgentService']['GetAgentUpdateCache']();
 }
 
 export function GetProjectAgentSkillCount(arg1, arg2) {

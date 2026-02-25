@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"time"
 )
@@ -38,20 +37,6 @@ type AgentInfo struct {
 	Name      string `json:"name"`
 	LocalPath string `json:"localPath"`
 	IsCustom  bool   `json:"isCustom"`
-}
-
-// AgentUpdateInfo 更新检查结果
-type AgentUpdateInfo struct {
-	HasUpdate     bool          `json:"hasUpdate"`
-	NewAgents     []AgentConfig `json:"newAgents"`
-	LastCheckTime int64         `json:"lastCheckTime"`
-}
-
-// AgentUpdateCache 缓存结构
-type AgentUpdateCache struct {
-	LastCheckTime int64    `json:"lastCheckTime"`
-	DismissedAt   int64    `json:"dismissedAt,omitempty"`
-	NewAgentNames []string `json:"newAgentNames,omitempty"`
 }
 
 // CustomAgentConfig 用户自定义的 agent 配置（持久化到文件）
@@ -109,9 +94,6 @@ var defaultAgents = []AgentConfig{
 // supportedAgents 运行时的 agents 列表，从 agents.json 加载
 var supportedAgents []AgentConfig
 
-// 远程 agents.ts 的 URL
-const remoteAgentsURL = "https://raw.githubusercontent.com/vercel-labs/skills/main/src/agents.ts"
-
 // init 在启动时从 agents.json 加载 agent 列表，若文件不存在则用默认列表初始化
 func init() {
 	agents, err := loadAgentsFromFile()
@@ -154,14 +136,6 @@ func getAgentsFilePath() (string, error) {
 		return "", err
 	}
 	return filepath.Join(configDir, "agents.json"), nil
-}
-
-func getAgentCacheFilePath() (string, error) {
-	configDir, err := getConfigDir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(configDir, "agent-update-cache.json"), nil
 }
 
 // ---- agents.json 持久化 ----
@@ -224,39 +198,6 @@ func saveCustomAgents(agents []CustomAgentConfig) error {
 		return err
 	}
 	data, err := json.MarshalIndent(agents, "", "  ")
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(filePath, data, 0644)
-}
-
-// ---- 更新缓存 ----
-
-func loadAgentUpdateCache() (*AgentUpdateCache, error) {
-	filePath, err := getAgentCacheFilePath()
-	if err != nil {
-		return nil, err
-	}
-	data, err := os.ReadFile(filePath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return &AgentUpdateCache{}, nil
-		}
-		return nil, err
-	}
-	var cache AgentUpdateCache
-	if err := json.Unmarshal(data, &cache); err != nil {
-		return &AgentUpdateCache{}, nil
-	}
-	return &cache, nil
-}
-
-func saveAgentUpdateCache(cache *AgentUpdateCache) error {
-	filePath, err := getAgentCacheFilePath()
-	if err != nil {
-		return err
-	}
-	data, err := json.MarshalIndent(cache, "", "  ")
 	if err != nil {
 		return err
 	}
@@ -588,185 +529,4 @@ func (as *AgentService) RemoveCustomAgent(name string) error {
 	return saveCustomAgents(result)
 }
 
-// CheckAgentUpdates 检查远程是否有新的 Agent
-func (as *AgentService) CheckAgentUpdates() (*AgentUpdateInfo, error) {
-	resp, err := httpGet(remoteAgentsURL)
-	if err != nil {
-		return nil, fmt.Errorf("无法连接到远程服务器: %v", err)
-	}
 
-	remoteAgents := parseAgentsFromTypeScript(string(resp))
-
-	localNames := make(map[string]bool)
-	for _, a := range supportedAgents {
-		localNames[a.Name] = true
-	}
-	customs, _ := loadCustomAgents()
-	for _, c := range customs {
-		localNames[c.Name] = true
-	}
-
-	var newAgents []AgentConfig
-	for _, ra := range remoteAgents {
-		if !localNames[ra.Name] {
-			newAgents = append(newAgents, ra)
-		}
-	}
-
-	cache := &AgentUpdateCache{
-		LastCheckTime: time.Now().Unix(),
-	}
-	if len(newAgents) > 0 {
-		for _, a := range newAgents {
-			cache.NewAgentNames = append(cache.NewAgentNames, a.Name)
-		}
-	}
-	saveAgentUpdateCache(cache)
-
-	fmt.Printf("Agent 更新检查完成: 远程 %d 个, 本地 %d 个, 新增 %d 个\n", len(remoteAgents), len(localNames), len(newAgents))
-
-	return &AgentUpdateInfo{
-		HasUpdate:     len(newAgents) > 0,
-		NewAgents:     newAgents,
-		LastCheckTime: cache.LastCheckTime,
-	}, nil
-}
-
-// GetAgentUpdateCache 获取上次检查的缓存信息
-func (as *AgentService) GetAgentUpdateCache() (*AgentUpdateCache, error) {
-	return loadAgentUpdateCache()
-}
-
-// DismissAgentUpdate 忽略本次更新提示
-func (as *AgentService) DismissAgentUpdate() error {
-	cache, err := loadAgentUpdateCache()
-	if err != nil {
-		return err
-	}
-	cache.DismissedAt = time.Now().Unix()
-	cache.NewAgentNames = nil
-	return saveAgentUpdateCache(cache)
-}
-
-// ApplyAgentUpdates 将新 Agent 添加到 agents.json
-func (as *AgentService) ApplyAgentUpdates() error {
-	resp, err := httpGet(remoteAgentsURL)
-	if err != nil {
-		return fmt.Errorf("无法获取远程 Agent 列表: %v", err)
-	}
-	remoteAgents := parseAgentsFromTypeScript(string(resp))
-
-	localNames := make(map[string]bool)
-	for _, a := range supportedAgents {
-		localNames[a.Name] = true
-	}
-	customs, _ := loadCustomAgents()
-	for _, c := range customs {
-		localNames[c.Name] = true
-	}
-
-	addedCount := 0
-	for _, ra := range remoteAgents {
-		if !localNames[ra.Name] {
-			supportedAgents = append(supportedAgents, ra)
-			localNames[ra.Name] = true
-			addedCount++
-			fmt.Printf("  + 新增 Agent: %s (local: %s, global: %s)\n", ra.Name, ra.LocalPath, ra.GlobalPath)
-		}
-	}
-
-	if addedCount > 0 {
-		if err := saveAgentsToFile(supportedAgents); err != nil {
-			return fmt.Errorf("保存 Agent 配置失败: %v", err)
-		}
-	}
-
-	cache, _ := loadAgentUpdateCache()
-	if cache != nil {
-		cache.NewAgentNames = nil
-		cache.DismissedAt = 0
-		saveAgentUpdateCache(cache)
-	}
-
-	fmt.Printf("Agent 更新完成: 新增 %d 个\n", addedCount)
-	return nil
-}
-
-// ---- TypeScript 解析 ----
-
-// parseAgentsFromTypeScript 从 TypeScript 源码解析 Agent 配置
-func parseAgentsFromTypeScript(content string) []AgentConfig {
-	var agents []AgentConfig
-
-	blockRe := regexp.MustCompile(`(?:'([^']+)'|(\w[\w-]*))\s*:\s*\{`)
-	displayNameRe := regexp.MustCompile(`displayName:\s*['"]([^'"]+)['"]`)
-	skillsDirRe := regexp.MustCompile(`skillsDir:\s*['"]([^'"]+)['"]`)
-	globalDirStrRe := regexp.MustCompile(`globalSkillsDir:\s*['"]([^'"]+)['"]`)
-	globalDirJoinRe := regexp.MustCompile(`globalSkillsDir:\s*join\([^,]+,\s*['"]([^'"]+)['"]\)`)
-
-	lines := strings.Split(content, "\n")
-	inBlock := false
-	braceDepth := 0
-	var blockLines []string
-
-	for _, line := range lines {
-		trimmed := strings.TrimSpace(line)
-
-		if !inBlock {
-			if blockRe.MatchString(trimmed) {
-				inBlock = true
-				braceDepth = strings.Count(trimmed, "{") - strings.Count(trimmed, "}")
-				blockLines = []string{trimmed}
-				if braceDepth <= 0 {
-					processAgentBlock(strings.Join(blockLines, "\n"), displayNameRe, skillsDirRe, globalDirStrRe, globalDirJoinRe, &agents)
-					inBlock = false
-					blockLines = nil
-				}
-			}
-		} else {
-			blockLines = append(blockLines, trimmed)
-			braceDepth += strings.Count(trimmed, "{") - strings.Count(trimmed, "}")
-			if braceDepth <= 0 {
-				processAgentBlock(strings.Join(blockLines, "\n"), displayNameRe, skillsDirRe, globalDirStrRe, globalDirJoinRe, &agents)
-				inBlock = false
-				blockLines = nil
-			}
-		}
-	}
-
-	return agents
-}
-
-func processAgentBlock(block string, displayNameRe, skillsDirRe, globalDirStrRe, globalDirJoinRe *regexp.Regexp, agents *[]AgentConfig) {
-	displayNameMatch := displayNameRe.FindStringSubmatch(block)
-	skillsDirMatch := skillsDirRe.FindStringSubmatch(block)
-
-	if len(displayNameMatch) < 2 || len(skillsDirMatch) < 2 {
-		return
-	}
-
-	displayName := displayNameMatch[1]
-	localPath := skillsDirMatch[1]
-
-	globalPath := ""
-	if m := globalDirStrRe.FindStringSubmatch(block); len(m) >= 2 {
-		globalPath = strings.TrimPrefix(m[1], "~/")
-	} else if m := globalDirJoinRe.FindStringSubmatch(block); len(m) >= 2 {
-		p := m[1]
-		if strings.HasPrefix(p, ".") {
-			globalPath = p
-		} else {
-			globalPath = "." + p
-		}
-	}
-
-	if globalPath == "" {
-		globalPath = localPath
-	}
-
-	*agents = append(*agents, AgentConfig{
-		Name:       displayName,
-		GlobalPath: globalPath,
-		LocalPath:  localPath,
-	})
-}
