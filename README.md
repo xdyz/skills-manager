@@ -124,6 +124,12 @@ skills-manager/
 wails dev
 ```
 
+## 声明
+
+本工具使用 [skills.sh](https://skills.sh) 的公开 API 搜索技能，技能本身来自各自的 GitHub 仓库，遵循其原始许可证。
+
+本项目与 skills.sh 官方无关，仅为社区开发的第三方 GUI 客户端。
+
 ## License
 
 MIT
