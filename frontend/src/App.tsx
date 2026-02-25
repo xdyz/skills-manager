@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react"
 import { RouterProvider } from "react-router-dom"
+import { useTranslation } from "react-i18next"
 import routes from "./routes"
 import SetupPage from "./pages/setup"
 import Logo from "./components/Logo"
@@ -13,6 +14,7 @@ interface EnvStatus {
 }
 
 const App = () => {
+  const { t } = useTranslation()
   const [envStatus, setEnvStatus] = useState<EnvStatus | null>(null)
   const [envReady, setEnvReady] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -26,7 +28,7 @@ const App = () => {
     try {
       const [status] = await Promise.all([
         RefreshEnv(),
-        new Promise(resolve => setTimeout(resolve, 500)), // 最少显示 500ms loading
+        new Promise(resolve => setTimeout(resolve, 500)),
       ])
       setEnvStatus(status as EnvStatus)
       const s = status as EnvStatus
@@ -53,7 +55,7 @@ const App = () => {
           <div className="flex justify-center mb-4 animate-pulse">
             <Logo size={56} />
           </div>
-          <p className="text-sm text-muted-foreground">正在检查运行环境...</p>
+          <p className="text-sm text-muted-foreground">{t("checking-env")}</p>
         </div>
       </div>
     )

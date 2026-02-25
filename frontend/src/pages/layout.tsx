@@ -1,4 +1,5 @@
 import { Outlet, useNavigate, useLocation } from "react-router-dom"
+import { useTranslation } from "react-i18next"
 import { Button } from "@/components/ui/button"
 import { Toaster } from "@/components/ui/toaster"
 import {
@@ -20,7 +21,7 @@ import {
   Add01Icon,
   FolderOpenIcon,
   Folder02Icon,
-  Cancel01Icon
+  Cancel01Icon,
 } from "hugeicons-react"
 import { useState, useEffect } from "react"
 import { SelectFolder, GetFolders, RemoveFolder } from "@wailsjs/go/services/FolderService"
@@ -28,6 +29,7 @@ import { SelectFolder, GetFolders, RemoveFolder } from "@wailsjs/go/services/Fol
 const PageLayout = () => {
   const navigate = useNavigate()
   const location = useLocation()
+  const { t, i18n } = useTranslation()
   const [theme, setTheme] = useState<"light" | "dark">("light")
   const [folders, setFolders] = useState<string[]>([])
   const [selectedFolder, setSelectedFolder] = useState<string | null>(null)
@@ -108,6 +110,11 @@ const PageLayout = () => {
     document.documentElement.classList.toggle("dark", newTheme === "dark")
   }
 
+  const toggleLanguage = () => {
+    const newLng = i18n.language === "zh" ? "en" : "zh"
+    i18n.changeLanguage(newLng)
+  }
+
   const isActive = (path: string) => {
     return location.pathname === path || (path === "/home" && location.pathname === "/")
   }
@@ -125,17 +132,25 @@ const PageLayout = () => {
             <Logo size={24} />
             <span className="text-[13px] font-semibold tracking-tight text-foreground/85">Skills Manager</span>
           </div>
-          <Button variant="ghost" size="icon" className="h-7 w-7 rounded text-muted-foreground hover:text-foreground" onClick={toggleTheme}>
-            {theme === "light" ? <Moon02Icon size={15} /> : <Sun03Icon size={15} />}
-          </Button>
+          <div className="flex items-center gap-1">
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              className="h-7 w-7 rounded text-muted-foreground hover:text-foreground text-[11px] font-semibold"
+              onClick={toggleLanguage}
+            >
+              {i18n.language === "zh" ? "EN" : "ZH"}
+            </Button>
+            <Button variant="ghost" size="icon" className="h-7 w-7 rounded text-muted-foreground hover:text-foreground" onClick={toggleTheme}>
+              {theme === "light" ? <Moon02Icon size={15} /> : <Sun03Icon size={15} />}
+            </Button>
+          </div>
         </div>
       </header>
 
       <div className="flex flex-1 overflow-hidden">
         {/* Sidebar */}
         <aside className="flex flex-col w-52 border-r border-border/50 bg-muted/30">
-          {/* Warm gradient at bottom */}
-
           <nav className="flex flex-col gap-0.5 p-2.5 pt-3">
             <Button
               variant={isActive("/home") ? "secondary" : "ghost"}
@@ -143,7 +158,7 @@ const PageLayout = () => {
               onClick={() => navigate("/home")}
             >
               <Home01Icon size={15} />
-              首页
+              {t("home")}
             </Button>
             <Button
               variant={isActive("/skills") ? "secondary" : "ghost"}
@@ -151,14 +166,14 @@ const PageLayout = () => {
               onClick={() => navigate("/skills")}
             >
               <ChartHistogramIcon size={15} />
-              Skills 技能
+              {t("skills")}
             </Button>
           </nav>
 
           {/* Projects Section */}
           <div className={`flex flex-col mt-3 overflow-hidden ${folders.length > 0 ? 'flex-1' : ''}`}>
             <div className="flex items-center justify-between px-3.5 mb-2">
-              <h3 className="text-[11px] font-medium uppercase tracking-widest text-muted-foreground/70">项目</h3>
+              <h3 className="text-[11px] font-medium uppercase tracking-widest text-muted-foreground/70">{t("projects")}</h3>
               <Button 
                 variant="ghost" 
                 size="icon" 
@@ -174,7 +189,7 @@ const PageLayout = () => {
                 className="mx-2.5 px-3 py-2.5 rounded border border-dashed border-border/60 cursor-pointer hover:border-primary/30 hover:bg-primary/4 transition-colors"
                 onClick={handleAddFolder}
               >
-                <p className="text-[11px] text-muted-foreground/50 text-center">点击 + 添加项目</p>
+                <p className="text-[11px] text-muted-foreground/50 text-center">{t("add-project")}</p>
               </div>
             ) : (
               <div className="flex-1 overflow-y-auto px-1.5">
@@ -219,20 +234,20 @@ const PageLayout = () => {
       <AlertDialog open={!!folderToRemove} onOpenChange={(open) => !open && setFolderToRemove(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>确认移除项目</AlertDialogTitle>
+            <AlertDialogTitle>{t("confirm-remove-project")}</AlertDialogTitle>
             <AlertDialogDescription>
-              确定要移除项目 <span className="font-semibold text-foreground">"{folderToRemove ? getFolderName(folderToRemove) : ""}"</span> 吗？
+              {t("confirm-remove-project-desc", { name: folderToRemove ? getFolderName(folderToRemove) : "" })}
               <br /><br />
-              此操作只会从列表中移除，不会删除项目文件。
+              {t("remove-project-note")}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogCancel>{t("cancel")}</AlertDialogCancel>
             <AlertDialogAction
               onClick={confirmRemoveFolder}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              确认移除
+              {t("confirm-remove")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

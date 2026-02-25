@@ -7,7 +7,7 @@
   "frontend:dev:watcher": "pnpm run dev",
   "frontend:dev:serverUrl": "auto",
   "author": {
-    "name": "meinezhang",
-    "email": "meinezhang@tencent.com"
+    "name": "xdyz",
+    "email": "xdyz@outlook.com"
   }
 }

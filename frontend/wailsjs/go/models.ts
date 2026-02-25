@@ -68,6 +68,7 @@ export namespace services {
 	    url: string;
 	    description: string;
 	    installed: boolean;
+	    installs: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new RemoteSkill(source);
@@ -82,6 +83,7 @@ export namespace services {
 	        this.url = source["url"];
 	        this.description = source["description"];
 	        this.installed = source["installed"];
+	        this.installs = source["installs"];
 	    }
 	}
 	export class Skills {

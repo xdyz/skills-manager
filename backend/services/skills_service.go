@@ -50,6 +50,7 @@ type RemoteSkill struct {
 	URL         string `json:"url"`         // 例如: https://skills.sh/vercel-labs/agent-skills/vercel-react-best-practices
 	Description string `json:"description"` // 技能描述
 	Installed   bool   `json:"installed"`   // 是否已安装
+	Installs    int    `json:"installs"`    // 安装次数
 }
 
 // SkillsLock .skills-lock 文件结构
@@ -606,6 +607,7 @@ func (ss *SkillsService) FindRemoteSkills(query string) ([]RemoteSkill, error) {
 			Repo:     repo,
 			Name:     s.Name,
 			URL:      fmt.Sprintf("https://skills.sh/%s", s.ID),
+			Installs: s.Installs,
 		})
 	}
 

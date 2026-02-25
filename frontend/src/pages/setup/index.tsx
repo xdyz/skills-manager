@@ -1,4 +1,5 @@
 import { useState } from "react"
+import { useTranslation } from "react-i18next"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -26,6 +27,7 @@ interface SetupPageProps {
 }
 
 const SetupPage = ({ envStatus, onEnvReady }: SetupPageProps) => {
+  const { t } = useTranslation()
   const [status, setStatus] = useState<EnvStatus>(envStatus)
   const [installingSkills, setInstallingSkills] = useState(false)
   const [checking, setChecking] = useState(false)
@@ -41,7 +43,7 @@ const SetupPage = ({ envStatus, onEnvReady }: SetupPageProps) => {
         onEnvReady()
       }
     } catch (e) {
-      setError(`检查失败: ${e}`)
+      setError(t("check-failed", { error: e }))
     } finally {
       setChecking(false)
     }
@@ -71,17 +73,16 @@ const SetupPage = ({ envStatus, onEnvReady }: SetupPageProps) => {
           </div>
           <h1 className="text-2xl font-semibold tracking-tight">Skills Manager</h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            应用需要以下依赖才能正常运行，请确保它们已安装
+            {t("setup-deps-required")}
           </p>
         </div>
 
         <Card>
           <CardHeader className="pb-4">
-            <CardTitle className="text-lg">环境检查</CardTitle>
-            <CardDescription>检测必要的运行依赖</CardDescription>
+            <CardTitle className="text-lg">{t("env-check")}</CardTitle>
+            <CardDescription>{t("env-check-desc")}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {/* Node.js / npx */}
             <div className="flex items-center justify-between p-3 border rounded-lg">
               <div className="flex items-center gap-3">
                 {status.npxInstalled ? (
@@ -91,7 +92,7 @@ const SetupPage = ({ envStatus, onEnvReady }: SetupPageProps) => {
                 )}
                 <div>
                   <p className="text-sm font-medium">Node.js & npx</p>
-                  <p className="text-xs text-muted-foreground">JavaScript 运行时环境</p>
+                  <p className="text-xs text-muted-foreground">{t("js-runtime")}</p>
                 </div>
               </div>
               {status.npxInstalled ? (
@@ -99,11 +100,10 @@ const SetupPage = ({ envStatus, onEnvReady }: SetupPageProps) => {
                   {status.nodeVersion}
                 </Badge>
               ) : (
-                <Badge variant="destructive" className="text-xs">未安装</Badge>
+                <Badge variant="destructive" className="text-xs">{t("not-installed")}</Badge>
               )}
             </div>
 
-            {/* Skills CLI */}
             <div className="flex items-center justify-between p-3 border rounded-lg">
               <div className="flex items-center gap-3">
                 {status.skillsInstalled ? (
@@ -113,11 +113,11 @@ const SetupPage = ({ envStatus, onEnvReady }: SetupPageProps) => {
                 )}
                 <div>
                   <p className="text-sm font-medium">Skills CLI</p>
-                  <p className="text-xs text-muted-foreground">技能管理命令行工具</p>
+                  <p className="text-xs text-muted-foreground">{t("skills-cli-tool")}</p>
                 </div>
               </div>
               {status.skillsInstalled ? (
-                <Badge variant="secondary" className="text-xs">已安装</Badge>
+                <Badge variant="secondary" className="text-xs">{t("installed")}</Badge>
               ) : (
                 <Button
                   size="sm"
@@ -127,19 +127,18 @@ const SetupPage = ({ envStatus, onEnvReady }: SetupPageProps) => {
                   {installingSkills ? (
                     <>
                       <RefreshIcon size={14} className="mr-1.5 animate-spin" />
-                      安装中...
+                      {t("installing")}
                     </>
                   ) : (
                     <>
                       <Download01Icon size={14} className="mr-1.5" />
-                      安装
+                      {t("install")}
                     </>
                   )}
                 </Button>
               )}
             </div>
 
-            {/* 错误信息 */}
             {error && (
               <div className="flex items-start gap-2 p-3 text-sm border rounded-lg border-destructive/50 bg-destructive/5 text-destructive">
                 <AlertCircleIcon size={16} className="mt-0.5 shrink-0" />
@@ -147,16 +146,15 @@ const SetupPage = ({ envStatus, onEnvReady }: SetupPageProps) => {
               </div>
             )}
 
-            {/* Node.js 未安装提示 */}
             {!status.npxInstalled && (
               <div className="flex items-start gap-2 p-3 text-sm border rounded-lg border-amber-500/50 bg-amber-500/5 text-amber-700 dark:text-amber-400">
                 <AlertCircleIcon size={16} className="mt-0.5 shrink-0" />
                 <p>
-                  请先安装 Node.js：访问{" "}
+                  {t("install-node-hint")}{" "}
                   <span className="font-medium underline cursor-pointer" onClick={() => BrowserOpenURL("https://nodejs.org")}>
                     nodejs.org
                   </span>{" "}
-                  下载安装后，重新检查。
+                  {t("install-node-hint-suffix")}
                 </p>
               </div>
             )}
@@ -168,18 +166,18 @@ const SetupPage = ({ envStatus, onEnvReady }: SetupPageProps) => {
             {checking ? (
               <>
                 <RefreshIcon size={16} className="mr-2 animate-spin" />
-                检查中...
+                {t("checking")}
               </>
             ) : (
               <>
                 <RefreshIcon size={16} className="mr-2" />
-                重新检查
+                {t("recheck")}
               </>
             )}
           </Button>
           {allReady && (
             <Button onClick={onEnvReady}>
-              进入应用 →
+              {t("enter-app")}
             </Button>
           )}
         </div>
