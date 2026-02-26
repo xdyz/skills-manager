@@ -24,19 +24,15 @@ import {
 import { toast } from "@/components/ui/use-toast"
 import {
   Search01Icon,
-  UserMultipleIcon,
+  AiChat02Icon,
   Add01Icon,
   Delete02Icon,
   Folder02Icon,
   RefreshIcon,
+  MultiplicationSignIcon,
 } from "hugeicons-react"
 import { GetSupportedAgents, AddCustomAgent, RemoveCustomAgent } from "@wailsjs/go/services/AgentService"
-
-interface AgentInfo {
-  name: string
-  localPath: string
-  isCustom: boolean
-}
+import type { AgentInfo } from "@/types"
 
 const AgentsPage = () => {
   const { t } = useTranslation()
@@ -49,6 +45,13 @@ const AgentsPage = () => {
 
   useEffect(() => {
     loadAgents()
+  }, [])
+
+  // Refresh data on window focus
+  useEffect(() => {
+    const handleFocus = () => loadAgents()
+    window.addEventListener("focus", handleFocus)
+    return () => window.removeEventListener("focus", handleFocus)
   }, [])
 
   const loadAgents = async () => {
@@ -104,7 +107,15 @@ const AgentsPage = () => {
         <div className="flex items-center justify-between gap-2 mt-4">
           <div className="relative flex-1">
             <Search01Icon size={18} className="absolute transform -translate-y-1/2 left-3 top-1/2 text-muted-foreground" />
-            <Input placeholder={t("search-agent")} className="pl-10" value={agentListSearch} onChange={(e) => setAgentListSearch(e.target.value)} />
+            <Input placeholder={t("search-agent")} className="pl-10 pr-8" value={agentListSearch} onChange={(e) => setAgentListSearch(e.target.value)} />
+            {agentListSearch && (
+              <button
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                onClick={() => setAgentListSearch("")}
+              >
+                <MultiplicationSignIcon size={14} />
+              </button>
+            )}
           </div>
           <Button size="sm" onClick={() => { setNewAgentName(""); setShowAddAgentDialog(true) }}>
             <Add01Icon size={14} className="mr-1.5" />
@@ -127,8 +138,8 @@ const AgentsPage = () => {
           <div className="grid grid-cols-1 gap-2 md:grid-cols-2 lg:grid-cols-3">
             {filteredAgents.map((agent) => (
               <div key={agent.name} className="flex items-center gap-3 p-3 rounded-md border border-border/50 hover:bg-accent/40 transition-all duration-150">
-                <div className={`p-2 rounded shrink-0 ${agent.isCustom ? 'bg-amber-500/8' : 'bg-primary/8'}`}>
-                  <UserMultipleIcon size={15} className={agent.isCustom ? 'text-amber-500' : 'text-primary'} />
+                <div className={`p-2 rounded shrink-0 ${agent.isCustom ? 'bg-amber-500/10' : 'bg-primary/10'}`}>
+                  <AiChat02Icon size={15} className={agent.isCustom ? 'text-amber-500' : 'text-primary'} />
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium truncate">{agent.name}</p>
@@ -161,7 +172,7 @@ const AgentsPage = () => {
           <div className="space-y-3">
             <div className="space-y-1.5">
               <Label htmlFor="agent-name" className="text-xs text-muted-foreground">{t("agent-name-label")}</Label>
-              <Input id="agent-name" placeholder="MyAgent" className="h-9 text-sm" value={newAgentName} onChange={(e) => setNewAgentName(e.target.value)} />
+              <Input id="agent-name" placeholder="MyAgent" className="h-9 text-sm" value={newAgentName} onChange={(e) => setNewAgentName(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && newAgentName.trim()) handleAddAgent() }} />
             </div>
             {newAgentName.trim() && (
               <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-muted/50 text-xs text-muted-foreground">

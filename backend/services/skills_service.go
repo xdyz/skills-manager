@@ -70,6 +70,24 @@ type SkillLockEntry struct {
 	UpdatedAt   string `json:"updatedAt"`
 }
 
+// sanitizeJSON removes trailing commas to handle malformed JSON (e.g. from external tools)
+func sanitizeJSON(data []byte) []byte {
+	re := regexp.MustCompile(`,(\s*[}\]])`)
+	return re.ReplaceAll(data, []byte("$1"))
+}
+
+// unmarshalSkillsLock safely parses .skills-lock with trailing comma tolerance
+func unmarshalSkillsLock(data []byte) (SkillsLock, error) {
+	var lock SkillsLock
+	if err := json.Unmarshal(data, &lock); err != nil {
+		// Retry with sanitized JSON
+		if err2 := json.Unmarshal(sanitizeJSON(data), &lock); err2 != nil {
+			return lock, err // Return original error
+		}
+	}
+	return lock, nil
+}
+
 func NewSkillsService() *SkillsService {
 	return &SkillsService{
 		skills: []Skills{},
@@ -110,7 +128,7 @@ func (ss *SkillsService) GetAllAgentSkills() ([]Skills, error) {
 	lockPath := filepath.Join(centralSkillsDir, ".skills-lock")
 	var lock SkillsLock
 	if data, err := os.ReadFile(lockPath); err == nil {
-		json.Unmarshal(data, &lock)
+		lock, _ = unmarshalSkillsLock(data)
 	}
 
 	// 2. 使用 map 去重，key 是 skill 名称
@@ -246,6 +264,109 @@ func parseSkillMd(content string, path string) Skills {
 	return skill
 }
 
+// SkillDetail 技能详情
+type SkillDetail struct {
+	Name        string   `json:"name"`
+	Desc        string   `json:"desc"`
+	Path        string   `json:"path"`
+	Language    string   `json:"language"`
+	Framework   string   `json:"framework"`
+	Agents      []string `json:"agents"`
+	Source      string   `json:"source"`
+	Content     string   `json:"content"`     // SKILL.md 完整内容
+	InstalledAt string   `json:"installedAt"` // 安装时间
+	UpdatedAt   string   `json:"updatedAt"`   // 更新时间
+}
+
+// GetSkillDetail 获取指定 skill 的详细信息（包含 SKILL.md 内容和安装信息）
+func (ss *SkillsService) GetSkillDetail(skillName string) (*SkillDetail, error) {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get home directory: %v", err)
+	}
+
+	centralSkillsDir := filepath.Join(homeDir, ".agents", "skills")
+	skillPath := filepath.Join(centralSkillsDir, skillName)
+
+	// 检查 skill 是否存在
+	if _, err := os.Stat(skillPath); os.IsNotExist(err) {
+		return nil, fmt.Errorf("skill not found: %s", skillName)
+	}
+
+	// 读取 SKILL.md
+	skillMdPath := filepath.Join(skillPath, "SKILL.md")
+	content, err := os.ReadFile(skillMdPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read SKILL.md: %v", err)
+	}
+
+	// 解析 frontmatter
+	parsed := parseSkillMd(string(content), skillPath)
+
+	detail := &SkillDetail{
+		Name:      skillName,
+		Desc:      parsed.Desc,
+		Path:      skillPath,
+		Language:  parsed.Language,
+		Framework: parsed.Framework,
+		Content:   string(content),
+	}
+
+	// 从 .skills-lock 获取安装信息
+	lockPath := filepath.Join(centralSkillsDir, ".skills-lock")
+	if data, err := os.ReadFile(lockPath); err == nil {
+		if lock, err := unmarshalSkillsLock(data); err == nil {
+			if entry, ok := lock.Skills[skillName]; ok {
+				detail.Source = entry.Source
+				detail.InstalledAt = entry.InstalledAt
+				detail.UpdatedAt = entry.UpdatedAt
+			}
+		}
+	}
+
+	// 获取链接的 agents
+	agents, _ := ss.GetSkillAgentLinks(skillName)
+	detail.Agents = agents
+
+	return detail, nil
+}
+
+// BatchDeleteSkills 批量删除多个 skills
+func (ss *SkillsService) BatchDeleteSkills(skillNames []string) (int, error) {
+	successCount := 0
+	var lastErr error
+	for _, name := range skillNames {
+		if err := ss.DeleteSkill(name); err != nil {
+			lastErr = err
+			fmt.Printf("✗ 批量删除失败 [%s]: %v\n", name, err)
+		} else {
+			successCount++
+		}
+	}
+	if successCount == 0 && lastErr != nil {
+		return 0, lastErr
+	}
+	return successCount, nil
+}
+
+// BatchUpdateSkillAgentLinks 批量更新多个 skills 的 agent 链接
+func (ss *SkillsService) BatchUpdateSkillAgentLinks(skillNames []string, agents []string) (int, error) {
+	successCount := 0
+	var lastErr error
+	for _, name := range skillNames {
+		if err := ss.UpdateSkillAgentLinks(name, agents); err != nil {
+			lastErr = err
+			fmt.Printf("✗ 批量更新链接失败 [%s]: %v\n", name, err)
+		} else {
+			successCount++
+		}
+	}
+	if successCount == 0 && lastErr != nil {
+		return 0, lastErr
+	}
+	return successCount, nil
+}
+
 // GetProjectSkills 获取指定项目目录内的 skills
 func (ss *SkillsService) GetProjectSkills(projectPath string) ([]ProjectSkill, error) {
 	if projectPath == "" {
@@ -263,7 +384,7 @@ func (ss *SkillsService) GetProjectSkills(projectPath string) ([]ProjectSkill, e
 	lockPath := filepath.Join(centralSkillsDir, ".skills-lock")
 	var globalLock SkillsLock
 	if data, err := os.ReadFile(lockPath); err == nil {
-		json.Unmarshal(data, &globalLock)
+		globalLock, _ = unmarshalSkillsLock(data)
 	}
 
 	for _, agent := range getAllAgentConfigs() {
@@ -413,8 +534,7 @@ func (ss *SkillsService) FindRemoteSkills(query string) ([]RemoteSkill, error) {
 
 	installedSkills := make(map[string]SkillLockEntry)
 	if data, err := os.ReadFile(skillsLockPath); err == nil {
-		var lock SkillsLock
-		if err := json.Unmarshal(data, &lock); err == nil {
+		if lock, err := unmarshalSkillsLock(data); err == nil {
 			installedSkills = lock.Skills
 			fmt.Printf("读取到 %d 个已安装的 skills\n", len(installedSkills))
 		}
@@ -456,8 +576,7 @@ func (ss *SkillsService) findRemoteSkillsFallback(query string) ([]RemoteSkill, 
 
 	installedSkills := make(map[string]SkillLockEntry)
 	if data, err := os.ReadFile(skillsLockPath); err == nil {
-		var lock SkillsLock
-		if err := json.Unmarshal(data, &lock); err == nil {
+		if lock, err := unmarshalSkillsLock(data); err == nil {
 			installedSkills = lock.Skills
 		}
 	}
@@ -1112,8 +1231,7 @@ func (ss *SkillsService) DeleteSkill(skillName string) error {
 	// 3. 更新 .skills-lock 文件
 	lockPath := filepath.Join(centralSkillsDir, ".skills-lock")
 	if data, err := os.ReadFile(lockPath); err == nil {
-		var lock SkillsLock
-		if err := json.Unmarshal(data, &lock); err == nil {
+		if lock, err := unmarshalSkillsLock(data); err == nil {
 			delete(lock.Skills, skillName)
 			if data, err := json.MarshalIndent(lock, "", "  "); err == nil {
 				os.WriteFile(lockPath, data, 0644)
@@ -1142,8 +1260,8 @@ func (ss *SkillsService) UpdateSkill(skillName string) error {
 		return fmt.Errorf("failed to read .skills-lock: %v", err)
 	}
 
-	var lock SkillsLock
-	if err := json.Unmarshal(data, &lock); err != nil {
+	lock, err := unmarshalSkillsLock(data)
+	if err != nil {
 		return fmt.Errorf("failed to parse .skills-lock: %v", err)
 	}
 
@@ -1474,7 +1592,7 @@ func (ss *SkillsService) updateSkillsLock(skillsDir, skillName, source string) e
 
 	// 读取现有的 lock 文件
 	if data, err := os.ReadFile(lockPath); err == nil {
-		json.Unmarshal(data, &lock)
+		lock, _ = unmarshalSkillsLock(data)
 	} else {
 		// 文件不存在，创建新的
 		lock = SkillsLock{

@@ -88,6 +88,36 @@ export namespace services {
 	        this.supportedAgents = source["supportedAgents"];
 	    }
 	}
+	export class SkillDetail {
+	    name: string;
+	    desc: string;
+	    path: string;
+	    language: string;
+	    framework: string;
+	    agents: string[];
+	    source: string;
+	    content: string;
+	    installedAt: string;
+	    updatedAt: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new SkillDetail(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.desc = source["desc"];
+	        this.path = source["path"];
+	        this.language = source["language"];
+	        this.framework = source["framework"];
+	        this.agents = source["agents"];
+	        this.source = source["source"];
+	        this.content = source["content"];
+	        this.installedAt = source["installedAt"];
+	        this.updatedAt = source["updatedAt"];
+	    }
+	}
 	export class Skills {
 	    name: string;
 	    desc: string;

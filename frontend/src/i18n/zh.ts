@@ -189,6 +189,31 @@ const zh = {
     "force-disable": "强制禁用",
     "toast-project-skill-installed": "Skill \"{{name}}\" 已安装到 {{count}} 个 Agent（仅项目可用）",
     "toast-project-skill-removed": "Skill \"{{name}}\" 已从项目中移除",
+
+    // Batch operations
+    "batch-mode": "批量操作",
+    "exit-batch": "退出",
+    "batch-selected": "已选择 {{count}} 个",
+    "batch-delete": "批量删除",
+    "batch-config-links": "批量配置链接",
+    "confirm-batch-delete": "确认批量删除",
+    "confirm-batch-delete-desc": "确定要删除以下 {{count}} 个技能吗？",
+    "batch-delete-warn": "此操作将删除所有选中技能的文件和软链接，且无法撤销！",
+    "toast-batch-delete-success": "成功删除 {{count}} 个技能",
+    "toast-batch-delete-failed": "批量删除失败: {{error}}",
+    "batch-config-link-title": "批量配置 Agent 链接",
+    "batch-config-link-desc": "为 {{count}} 个技能统一设置 Agent 链接",
+    "toast-batch-links-updated": "成功为 {{count}} 个技能更新了 Agent 链接",
+    "toast-batch-links-failed": "批量更新链接失败: {{error}}",
+
+    // Skill Detail Page
+    "back-to-skills": "返回",
+    "skill-not-found": "未找到该技能",
+    "detail-linked-agents": "已链接 Agent",
+    "detail-installed-at": "安装时间",
+    "detail-updated-at": "更新时间",
+    "detail-path": "本地路径",
+    "toast-load-detail-failed": "加载技能详情失败: {{error}}",
   },
 }
 

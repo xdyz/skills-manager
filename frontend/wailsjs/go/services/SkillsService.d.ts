@@ -3,6 +3,10 @@
 import {services} from '../models';
 import {context} from '../models';
 
+export function BatchDeleteSkills(arg1:Array<string>):Promise<number>;
+
+export function BatchUpdateSkillAgentLinks(arg1:Array<string>,arg2:Array<string>):Promise<number>;
+
 export function DeleteSkill(arg1:string):Promise<void>;
 
 export function FindRemoteSkills(arg1:string):Promise<Array<services.RemoteSkill>>;
@@ -14,6 +18,8 @@ export function GetProjectSkillAgentLinks(arg1:string,arg2:string):Promise<Array
 export function GetProjectSkills(arg1:string):Promise<Array<services.ProjectSkill>>;
 
 export function GetSkillAgentLinks(arg1:string):Promise<Array<string>>;
+
+export function GetSkillDetail(arg1:string):Promise<services.SkillDetail>;
 
 export function InstallRemoteSkill(arg1:string,arg2:Array<string>):Promise<void>;
 

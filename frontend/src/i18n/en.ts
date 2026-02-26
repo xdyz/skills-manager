@@ -189,6 +189,31 @@ const en = {
     "force-disable": "Force Disable",
     "toast-project-skill-installed": "Skill \"{{name}}\" installed to {{count}} Agent(s) (project only)",
     "toast-project-skill-removed": "Skill \"{{name}}\" removed from project",
+
+    // Batch operations
+    "batch-mode": "Batch",
+    "exit-batch": "Exit",
+    "batch-selected": "{{count}} selected",
+    "batch-delete": "Batch Delete",
+    "batch-config-links": "Batch Config Links",
+    "confirm-batch-delete": "Confirm Batch Delete",
+    "confirm-batch-delete-desc": "Are you sure to delete the following {{count}} skill(s)?",
+    "batch-delete-warn": "This will delete all selected skills' files and symlinks. This action cannot be undone!",
+    "toast-batch-delete-success": "Successfully deleted {{count}} skill(s)",
+    "toast-batch-delete-failed": "Batch delete failed: {{error}}",
+    "batch-config-link-title": "Batch Configure Agent Links",
+    "batch-config-link-desc": "Set Agent links for {{count}} skill(s)",
+    "toast-batch-links-updated": "Successfully updated Agent links for {{count}} skill(s)",
+    "toast-batch-links-failed": "Batch update links failed: {{error}}",
+
+    // Skill Detail Page
+    "back-to-skills": "Back",
+    "skill-not-found": "Skill not found",
+    "detail-linked-agents": "Linked Agents",
+    "detail-installed-at": "Installed At",
+    "detail-updated-at": "Updated At",
+    "detail-path": "Local Path",
+    "toast-load-detail-failed": "Failed to load skill detail: {{error}}",
   },
 }
 

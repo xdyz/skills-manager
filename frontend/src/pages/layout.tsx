@@ -16,7 +16,7 @@ import Logo from "@/components/Logo"
 import { 
   Home01Icon, 
   ChartHistogramIcon,
-  UserMultipleIcon,
+  AiChat02Icon,
   Moon02Icon,
   Sun03Icon,
   Add01Icon,
@@ -43,6 +43,13 @@ const PageLayout = () => {
       document.documentElement.classList.toggle("dark", savedTheme === "dark")
     }
     loadFolders()
+  }, [])
+
+  // Refresh folders on window focus
+  useEffect(() => {
+    const handleFocus = () => loadFolders()
+    window.addEventListener("focus", handleFocus)
+    return () => window.removeEventListener("focus", handleFocus)
   }, [])
 
   // Sync selectedFolder with URL
@@ -117,6 +124,7 @@ const PageLayout = () => {
   }
 
   const isActive = (path: string) => {
+    if (path === "/skills") return location.pathname === "/skills" || location.pathname.startsWith("/skills/")
     return location.pathname === path || (path === "/home" && location.pathname === "/")
   }
 
@@ -174,7 +182,7 @@ const PageLayout = () => {
               className={`justify-start gap-2.5 h-8 text-[13px] rounded ${isActive("/agents") ? "bg-primary/10 text-primary font-medium" : "text-muted-foreground hover:text-foreground"}`}
               onClick={() => navigate("/agents")}
             >
-              <UserMultipleIcon size={15} />
+              <AiChat02Icon size={15} />
               {t("agents")}
             </Button>
           </nav>
@@ -195,7 +203,7 @@ const PageLayout = () => {
 
             {folders.length === 0 ? (
               <div 
-                className="mx-2.5 px-3 py-2.5 rounded border border-dashed border-border/60 cursor-pointer hover:border-primary/30 hover:bg-primary/4 transition-colors"
+                className="mx-2.5 px-3 py-2.5 rounded border border-dashed border-border/60 cursor-pointer hover:border-primary/30 hover:bg-primary/5 transition-colors"
                 onClick={handleAddFolder}
               >
                 <p className="text-[11px] text-muted-foreground/50 text-center">{t("add-project")}</p>
@@ -203,9 +211,9 @@ const PageLayout = () => {
             ) : (
               <div className="flex-1 overflow-y-auto px-1.5">
                 <div className="space-y-0.5">
-                  {folders.map((folder, index) => (
+                  {folders.map((folder) => (
                     <div
-                      key={index}
+                      key={folder}
                       className={`flex items-center gap-2 px-2.5 py-1.5 rounded cursor-pointer group transition-all duration-150 ${
                         selectedFolder === folder 
                           ? "bg-primary/10 text-primary" 

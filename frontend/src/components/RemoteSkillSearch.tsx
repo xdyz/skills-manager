@@ -140,16 +140,16 @@ const RemoteSkillSearch = ({
         ) : compact ? (
           /* Compact list mode for Dialog */
           <div className="space-y-2">
-            {skills.map((skill, index) => {
+            {skills.map((skill) => {
               const installed = checkInstalled(skill)
               return (
                 <div
-                  key={index}
+                  key={skill.fullName}
                   className={`flex items-center gap-3 p-3 rounded-md border border-border/50 transition-all duration-150 ${
                     installed ? "bg-muted/40" : "hover:bg-accent/40"
                   }`}
                 >
-                  <div className="p-2 rounded shrink-0 bg-blue-500/8">
+                  <div className="p-2 rounded shrink-0 bg-blue-500/10">
                     <Globe02Icon size={18} className="text-blue-500" />
                   </div>
                   <div className="flex-1 min-w-0">
@@ -208,14 +208,14 @@ const RemoteSkillSearch = ({
         ) : (
           /* Card grid mode for full page */
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
-            {skills.map((skill, index) => {
+            {skills.map((skill) => {
               const installed = checkInstalled(skill)
               return (
-                <Card key={index} className="flex flex-col border-border/50 shadow-none hover:shadow-sm hover:border-border transition-all duration-200">
+                <Card key={skill.fullName} className="flex flex-col border-border/50 shadow-none hover:shadow-sm hover:border-border transition-all duration-200">
                   <CardHeader className="pb-3">
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex items-start gap-3 flex-1 min-w-0">
-                        <div className="p-2 rounded shrink-0 bg-blue-500/8">
+                        <div className="p-2 rounded shrink-0 bg-blue-500/10">
                           <Globe02Icon size={18} className="text-blue-500" />
                         </div>
                         <div className="flex-1 min-w-0">
