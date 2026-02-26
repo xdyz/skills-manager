@@ -26,17 +26,27 @@ const App = () => {
   const checkEnvironment = async () => {
     setLoading(true)
     try {
-      const [status] = await Promise.all([
-        RefreshEnv(),
-        new Promise(resolve => setTimeout(resolve, 500)),
-      ])
-      setEnvStatus(status as EnvStatus)
-      const s = status as EnvStatus
-      if (s.npxInstalled && s.skillsInstalled) {
+      // 用 Promise.race 加超时保护，最多等 8 秒
+      const timeout = new Promise<EnvStatus>((_, reject) =>
+        setTimeout(() => reject(new Error("timeout")), 8000)
+      )
+      const status = await Promise.race([RefreshEnv(), timeout]) as EnvStatus
+      setEnvStatus(status)
+      if (status.npxInstalled && status.skillsInstalled) {
         setEnvReady(true)
       }
     } catch (e) {
       console.error("环境检查失败:", e)
+      // 超时或失败时，尝试用缓存的 CheckEnv 结果
+      try {
+        const { CheckEnv } = await import("@wailsjs/go/services/EnvService")
+        const cached = await CheckEnv() as EnvStatus
+        setEnvStatus(cached)
+        if (cached.npxInstalled && cached.skillsInstalled) {
+          setEnvReady(true)
+          return
+        }
+      } catch {}
       setEnvStatus({
         npxInstalled: false,
         skillsInstalled: false,

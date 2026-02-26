@@ -27,34 +27,46 @@ func NewEnvService() *EnvService {
 
 func (es *EnvService) Startup(ctx context.Context) {
 	es.ctx = ctx
-	// 启动时同步检测环境，确保前端首次调用 CheckEnv 时结果已就绪
-	es.detect()
+	// 启动时异步检测环境，不阻塞 app 启动
+	go es.detect()
 }
 
-// detect 执行实际的环境检测
+// detect 执行实际的环境检测（并行执行所有检查）
 func (es *EnvService) detect() {
 	status := EnvStatus{}
+	var wg sync.WaitGroup
+	var mu sync.Mutex
 
-	// 检查 node
-	if ver, err := shellOutput("node --version"); err == nil && ver != "" {
-		status.NodeVersion = ver
-	}
+	// 并行检查 node 和 npx
+	wg.Add(2)
 
-	// 检查 npx
-	if ver, err := shellOutput("npx --version"); err == nil && ver != "" {
-		status.NpxInstalled = true
-		status.NpxVersion = ver
-	}
+	go func() {
+		defer wg.Done()
+		if ver, err := shellOutput("node --version"); err == nil && ver != "" {
+			mu.Lock()
+			status.NodeVersion = ver
+			mu.Unlock()
+		}
+	}()
 
-	// 检查 skills CLI
+	go func() {
+		defer wg.Done()
+		if ver, err := shellOutput("npx --version"); err == nil && ver != "" {
+			mu.Lock()
+			status.NpxInstalled = true
+			status.NpxVersion = ver
+			mu.Unlock()
+		}
+	}()
+
+	wg.Wait()
+
+	// npx 存在时再检查 skills CLI
 	if status.NpxInstalled {
 		if _, err := shellRun("npx skills --help"); err == nil {
 			status.SkillsInstalled = true
 		}
 	}
-
-	fmt.Printf("环境检查: npx=%v, skills=%v, node=%s\n",
-		status.NpxInstalled, status.SkillsInstalled, status.NodeVersion)
 
 	es.mu.Lock()
 	es.status = status
@@ -76,13 +88,10 @@ func (es *EnvService) RefreshEnv() EnvStatus {
 
 // InstallSkillsCLI 安装 skills CLI
 func (es *EnvService) InstallSkillsCLI() error {
-	fmt.Println("安装 skills CLI...")
 	output, err := shellRun("npm install -g @anthropic-ai/skills")
 	if err != nil {
-		fmt.Printf("安装 skills CLI 失败: %s\n%s\n", err, string(output))
 		return fmt.Errorf("安装 skills CLI 失败: %v\n%s", err, string(output))
 	}
-	fmt.Printf("安装 skills CLI 成功: %s\n", string(output))
 	// 安装后刷新环境状态
 	es.detect()
 	return nil

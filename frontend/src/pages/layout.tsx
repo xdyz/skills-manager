@@ -2,6 +2,7 @@ import { Outlet, useNavigate, useLocation } from "react-router-dom"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/ui/button"
 import { Toaster } from "@/components/ui/toaster"
+import { toast } from "@/components/ui/use-toast"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -12,8 +13,28 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import Logo from "@/components/Logo"
-import { 
+import CommandPalette from "@/components/CommandPalette"
+import CreateSkillDialog from "@/components/CreateSkillDialog"
+import HealthCheckDialog from "@/components/HealthCheckDialog"
+import CustomSourcesDialog from "@/components/CustomSourcesDialog"
+import NotificationCenter, { type Notification } from "@/components/NotificationCenter"
+import {
   Home01Icon, 
   ChartHistogramIcon,
   AiChat02Icon,
@@ -23,9 +44,18 @@ import {
   FolderOpenIcon,
   Folder02Icon,
   Cancel01Icon,
+  MoreVerticalIcon,
+  Download04Icon,
+  Upload04Icon,
+  RefreshIcon,
+  Search01Icon,
+  Globe02Icon,
+  Settings02Icon,
+  Folder01Icon,
 } from "hugeicons-react"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import { SelectFolder, GetFolders, RemoveFolder } from "@wailsjs/go/services/FolderService"
+import { ExportConfigToFile, ImportConfig, CheckSkillUpdates, GetAutoUpdateConfig, SetAutoUpdateConfig, RunAutoUpdate, GetSettings, SaveSettings } from "@wailsjs/go/services/SkillsService"
 
 const PageLayout = () => {
   const navigate = useNavigate()
@@ -35,15 +65,100 @@ const PageLayout = () => {
   const [folders, setFolders] = useState<string[]>([])
   const [selectedFolder, setSelectedFolder] = useState<string | null>(null)
   const [folderToRemove, setFolderToRemove] = useState<string | null>(null)
+  const [showImportDialog, setShowImportDialog] = useState(false)
+  const [importFile, setImportFile] = useState<File | null>(null)
+  const [importing, setImporting] = useState(false)
+  const [exporting, setExporting] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false)
+  const [createSkillOpen, setCreateSkillOpen] = useState(false)
+  const [healthCheckOpen, setHealthCheckOpen] = useState(false)
+  const [customSourcesOpen, setCustomSourcesOpen] = useState(false)
+  const [notifications, setNotifications] = useState<Notification[]>([])
+  const [autoUpdateEnabled, setAutoUpdateEnabled] = useState(false)
+  const addNotification = useCallback((type: Notification["type"], title: string, message?: string) => {
+    setNotifications(prev => [{
+      id: Date.now().toString(),
+      type,
+      title,
+      message,
+      timestamp: Date.now(),
+      read: false,
+    }, ...prev].slice(0, 50))
+  }, [])
+
+  const dismissNotification = useCallback((id: string) => {
+    setNotifications(prev => prev.filter(n => n.id !== id))
+  }, [])
+
+  const clearAllNotifications = useCallback(() => {
+    setNotifications([])
+  }, [])
 
   useEffect(() => {
-    const savedTheme = localStorage.getItem("theme") as "light" | "dark" | null
-    if (savedTheme) {
-      setTheme(savedTheme)
-      document.documentElement.classList.toggle("dark", savedTheme === "dark")
-    }
+    // 从后端加载设置并应用主题/语言
+    GetSettings().then(s => {
+      if (s) {
+        const t = s.theme || "light"
+        setTheme(t as "light" | "dark")
+        document.documentElement.classList.toggle("dark", t === "dark")
+        localStorage.setItem("theme", t)
+        if (s.language && i18n.language !== s.language) {
+          i18n.changeLanguage(s.language)
+        }
+      }
+    }).catch(() => {
+      // 回退到 localStorage
+      const savedTheme = localStorage.getItem("theme") as "light" | "dark" | null
+      if (savedTheme) {
+        setTheme(savedTheme)
+        document.documentElement.classList.toggle("dark", savedTheme === "dark")
+      }
+    })
     loadFolders()
   }, [])
+
+  // Load auto-update config
+  useEffect(() => {
+    GetAutoUpdateConfig().then(config => {
+      setAutoUpdateEnabled(config?.enabled || false)
+    }).catch(() => {})
+  }, [])
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault()
+        setCommandPaletteOpen(prev => !prev)
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key === "1") { e.preventDefault(); navigate("/home") }
+      if ((e.metaKey || e.ctrlKey) && e.key === "2") { e.preventDefault(); navigate("/skills") }
+      if ((e.metaKey || e.ctrlKey) && e.key === "3") { e.preventDefault(); navigate("/agents") }
+      if ((e.metaKey || e.ctrlKey) && e.key === "4") { e.preventDefault(); navigate("/projects") }
+      if ((e.metaKey || e.ctrlKey) && e.key === "5") { e.preventDefault(); navigate("/settings") }
+      if ((e.metaKey || e.ctrlKey) && e.key === ",") { e.preventDefault(); navigate("/settings") }
+    }
+    window.addEventListener("keydown", handleKeyDown)
+    return () => window.removeEventListener("keydown", handleKeyDown)
+  }, [navigate])
+
+  // Auto-update check on startup
+  useEffect(() => {
+    GetAutoUpdateConfig().then(config => {
+      if (config?.enabled) {
+        const lastCheck = config.lastCheck ? new Date(config.lastCheck).getTime() : 0
+        const intervalMs = (config.intervalHours || 24) * 3600000
+        if (Date.now() - lastCheck > intervalMs) {
+          RunAutoUpdate().then(count => {
+            if (count > 0) {
+              addNotification("success", t("toast-auto-update-result", { count }))
+            }
+          }).catch(() => {})
+        }
+      }
+    }).catch(() => {})
+  }, [addNotification, t])
 
   // Refresh folders on window focus
   useEffect(() => {
@@ -111,20 +226,113 @@ const PageLayout = () => {
     }
   }
 
-  const toggleTheme = () => {
+  const toggleTheme = async () => {
     const newTheme = theme === "light" ? "dark" : "light"
     setTheme(newTheme)
     localStorage.setItem("theme", newTheme)
     document.documentElement.classList.toggle("dark", newTheme === "dark")
+    // 同步保存到后端设置
+    try {
+      const s = await GetSettings()
+      if (s) await SaveSettings(JSON.stringify({ ...s, theme: newTheme }))
+    } catch {}
   }
 
-  const toggleLanguage = () => {
+  const toggleLanguage = async () => {
     const newLng = i18n.language === "zh" ? "en" : "zh"
     i18n.changeLanguage(newLng)
+    // 同步保存到后端设置
+    try {
+      const s = await GetSettings()
+      if (s) await SaveSettings(JSON.stringify({ ...s, language: newLng }))
+    } catch {}
   }
+
+  const toggleAutoUpdate = useCallback(async () => {
+    const newEnabled = !autoUpdateEnabled
+    try {
+      await SetAutoUpdateConfig(newEnabled, 24)
+      setAutoUpdateEnabled(newEnabled)
+      toast({ title: t(newEnabled ? "auto-update-enabled" : "auto-update-disabled"), variant: "success" })
+    } catch (error) {
+      toast({ title: String(error), variant: "destructive" })
+    }
+  }, [autoUpdateEnabled, t])
+
+  const handleExport = useCallback(async () => {
+    try {
+      setExporting(true)
+      const savedPath = await ExportConfigToFile()
+      if (savedPath) {
+        toast({ title: t("toast-export-success-path", { path: savedPath }), variant: "success" })
+      }
+    } catch (error) {
+      toast({ title: t("toast-export-failed", { error }), variant: "destructive" })
+    } finally {
+      setExporting(false)
+    }
+  }, [t])
+
+  const handleImportFile = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      setImportFile(file)
+    }
+  }, [])
+
+  const handleImport = useCallback(async () => {
+    if (!importFile) return
+    try {
+      setImporting(true)
+      const text = await importFile.text()
+      const result = await ImportConfig(text)
+      toast({
+        title: t("toast-import-success", {
+          installed: result.installedCount,
+          skipped: result.skippedCount,
+        }),
+        variant: "success",
+      })
+      setShowImportDialog(false)
+      setImportFile(null)
+    } catch (error) {
+      toast({ title: t("toast-import-failed", { error }), variant: "destructive" })
+    } finally {
+      setImporting(false)
+    }
+  }, [importFile, t])
+
+  const handleCommandAction = useCallback((action: string) => {
+    switch (action) {
+      case "create-skill":
+        setCreateSkillOpen(true)
+        break
+      case "health-check":
+        setHealthCheckOpen(true)
+        break
+      case "check-updates":
+        CheckSkillUpdates().then((results) => {
+          const count = (results || []).filter(r => r.hasUpdate).length
+          if (count > 0) {
+            toast({ title: t("updates-available", { count }) })
+            addNotification("info", t("updates-available", { count }))
+          } else {
+            toast({ title: t("all-up-to-date"), variant: "success" })
+          }
+        }).catch((error: any) => {
+          toast({ title: t("toast-check-updates-failed", { error }), variant: "destructive" })
+        })
+        break
+      case "custom-sources":
+        setCustomSourcesOpen(true)
+        break
+    }
+  }, [t, addNotification])
 
   const isActive = (path: string) => {
     if (path === "/skills") return location.pathname === "/skills" || location.pathname.startsWith("/skills/")
+    if (path === "/collections") return location.pathname === "/collections"
+    if (path === "/settings") return location.pathname === "/settings"
     return location.pathname === path || (path === "/home" && location.pathname === "/")
   }
 
@@ -142,6 +350,41 @@ const PageLayout = () => {
             <span className="text-[13px] font-semibold tracking-tight text-foreground/85">Skills Manager</span>
           </div>
           <div className="flex items-center gap-1">
+            <button
+              className="flex items-center gap-1.5 h-7 px-2.5 rounded border border-border/50 bg-muted/40 text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors text-[11px]"
+              onClick={() => setCommandPaletteOpen(true)}
+            >
+              <Search01Icon size={12} />
+              <span className="hidden sm:inline">{t("search")}...</span>
+              <kbd className="text-[9px] bg-background/80 border border-border/50 px-1 py-0.5 rounded font-mono">⌘K</kbd>
+            </button>
+            <NotificationCenter notifications={notifications} onDismiss={dismissNotification} onClearAll={clearAllNotifications} />
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-7 w-7 rounded text-muted-foreground hover:text-foreground">
+                  <MoreVerticalIcon size={15} />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={handleExport} disabled={exporting}>
+                  <Download04Icon size={14} className="mr-2" />
+                  {exporting ? t("exporting") : t("export-config")}
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setShowImportDialog(true)}>
+                  <Upload04Icon size={14} className="mr-2" />
+                  {t("import-config")}
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setCustomSourcesOpen(true)}>
+                  <Globe02Icon size={14} className="mr-2" />
+                  {t("custom-sources")}
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={toggleAutoUpdate}>
+                  <RefreshIcon size={14} className="mr-2" />
+                  {t("auto-update")}: {autoUpdateEnabled ? "ON" : "OFF"}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
             <Button 
               variant="ghost" 
               size="icon" 
@@ -184,6 +427,23 @@ const PageLayout = () => {
             >
               <AiChat02Icon size={15} />
               {t("agents")}
+            </Button>
+            <Button
+              variant={isActive("/collections") ? "secondary" : "ghost"}
+              className={`justify-start gap-2.5 h-8 text-[13px] rounded ${isActive("/collections") ? "bg-primary/10 text-primary font-medium" : "text-muted-foreground hover:text-foreground"}`}
+              onClick={() => navigate("/collections")}
+            >
+              <Folder01Icon size={15} />
+              {t("collections")}
+            </Button>
+
+            <Button
+              variant={isActive("/settings") ? "secondary" : "ghost"}
+              className={`justify-start gap-2.5 h-8 text-[13px] rounded ${isActive("/settings") ? "bg-primary/10 text-primary font-medium" : "text-muted-foreground hover:text-foreground"}`}
+              onClick={() => navigate("/settings")}
+            >
+              <Settings02Icon size={15} />
+              {t("settings")}
             </Button>
           </nav>
 
@@ -270,6 +530,64 @@ const PageLayout = () => {
         </AlertDialogContent>
       </AlertDialog>
 
+      {/* Import Config Dialog */}
+      <Dialog open={showImportDialog} onOpenChange={(open) => { setShowImportDialog(open); if (!open) { setImportFile(null); if (fileInputRef.current) fileInputRef.current.value = "" } }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t("import-config-title")}</DialogTitle>
+            <DialogDescription>{t("import-config-desc")}</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".json"
+              onChange={handleImportFile}
+              className="hidden"
+            />
+            <div
+              className="border-2 border-dashed border-border/60 rounded-lg p-8 text-center cursor-pointer hover:border-primary/40 hover:bg-primary/5 transition-colors"
+              onClick={() => fileInputRef.current?.click()}
+              onDragOver={(e) => { e.preventDefault(); e.stopPropagation() }}
+              onDrop={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                const file = e.dataTransfer.files?.[0]
+                if (file && file.name.endsWith(".json")) {
+                  setImportFile(file)
+                }
+              }}
+            >
+              {importFile ? (
+                <div className="flex items-center justify-center gap-2">
+                  <Upload04Icon size={18} className="text-primary" />
+                  <span className="text-sm text-foreground">{t("import-file-selected", { name: importFile.name })}</span>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <Upload04Icon size={28} className="mx-auto text-muted-foreground/40" />
+                  <p className="text-sm text-muted-foreground">{t("import-file-hint")}</p>
+                </div>
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowImportDialog(false)}>{t("cancel")}</Button>
+            <Button onClick={handleImport} disabled={!importFile || importing}>
+              {importing ? (
+                <><RefreshIcon size={14} className="mr-1.5 animate-spin" />{t("importing")}</>
+              ) : (
+                <><Upload04Icon size={14} className="mr-1.5" />{t("start-import")}</>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <CommandPalette open={commandPaletteOpen} onOpenChange={setCommandPaletteOpen} onAction={handleCommandAction} />
+      <CreateSkillDialog open={createSkillOpen} onOpenChange={setCreateSkillOpen} />
+      <HealthCheckDialog open={healthCheckOpen} onOpenChange={setHealthCheckOpen} />
+      <CustomSourcesDialog open={customSourcesOpen} onOpenChange={setCustomSourcesOpen} />
       <Toaster />
     </div>
   )

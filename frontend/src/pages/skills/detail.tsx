@@ -15,6 +15,19 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import {
   ArrowLeft02Icon,
   CodeIcon,
   RefreshIcon,
@@ -24,12 +37,18 @@ import {
   Calendar03Icon,
   Folder01Icon,
   AiChat02Icon,
+  Edit02Icon,
+  GitCompareIcon,
+  FavouriteIcon,
+  SourceCodeIcon,
+  ArrowDown01Icon,
 } from "hugeicons-react"
-import { GetSkillDetail, DeleteSkill, UpdateSkill, GetSkillAgentLinks, UpdateSkillAgentLinks } from "@wailsjs/go/services/SkillsService"
+import { GetSkillDetail, DeleteSkill, UpdateSkill, GetSkillAgentLinks, UpdateSkillAgentLinks, GetSkillDiff, GetSkillTags, GetFavorites, ToggleFavorite, GetAvailableEditors, OpenSkillInEditor } from "@wailsjs/go/services/SkillsService"
 import { GetSupportedAgents } from "@wailsjs/go/services/AgentService"
 import { BrowserOpenURL } from "@wailsjs/runtime/runtime"
 import Markdown from "react-markdown"
 import ConfigAgentLinkDialog from "@/components/ConfigAgentLinkDialog"
+import TagManager from "@/components/TagManager"
 import type { AgentInfo } from "@/types"
 
 interface SkillDetailData {
@@ -59,6 +78,22 @@ const SkillDetailPage = () => {
   const [configDialogOpen, setConfigDialogOpen] = useState(false)
   const [allAgents, setAllAgents] = useState<AgentInfo[]>([])
 
+  // Editor removed - now uses dedicated edit page
+
+  // Tags
+  const [tags, setTags] = useState<string[]>([])
+
+  // Diff preview
+  const [showDiffDialog, setShowDiffDialog] = useState(false)
+  const [diffData, setDiffData] = useState<{ localContent: string; remoteContent: string; hasChanges: boolean } | null>(null)
+  const [loadingDiff, setLoadingDiff] = useState(false)
+
+  // Favorites
+  const [isFavorite, setIsFavorite] = useState(false)
+
+  // Available editors
+  const [editors, setEditors] = useState<{ id: string; name: string; icon: string; iconBase64: string }[]>([])
+
   const goBack = () => {
     if (window.history.length > 1) {
       navigate(-1)
@@ -71,7 +106,10 @@ const SkillDetailPage = () => {
     if (skillName) {
       loadDetail(skillName)
       loadAgents()
+      GetSkillTags(skillName).then(t => setTags(t || [])).catch(() => {})
+      GetFavorites().then(favs => setIsFavorite((favs || []).includes(skillName))).catch(() => {})
     }
+    GetAvailableEditors().then(e => setEditors(e || [])).catch(() => {})
   }, [skillName])
 
   // Refresh data silently on window focus
@@ -146,6 +184,34 @@ const SkillDetailPage = () => {
     toast({ title: t("toast-links-updated", { name, count: agents.length }), variant: "success" })
   }
 
+  const handleOpenEditor = () => {
+    navigate(`/skills/edit?name=${encodeURIComponent(skillName || "")}`)
+  }
+
+  const handleOpenInSystemEditor = async (editorID: string) => {
+    if (!skillName) return
+    try {
+      await OpenSkillInEditor(skillName, editorID)
+    } catch (error) {
+      toast({ title: t("toast-open-editor-failed", { error }), variant: "destructive" })
+    }
+  }
+
+  const handleLoadDiff = async () => {
+    if (!skillName) return
+    setShowDiffDialog(true)
+    setLoadingDiff(true)
+    try {
+      const diff = await GetSkillDiff(skillName)
+      setDiffData(diff)
+    } catch (error) {
+      toast({ title: t("diff-load-failed", { error }), variant: "destructive" })
+      setShowDiffDialog(false)
+    } finally {
+      setLoadingDiff(false)
+    }
+  }
+
   const formatDate = (dateStr: string) => {
     if (!dateStr) return "-"
     try {
@@ -210,43 +276,82 @@ const SkillDetailPage = () => {
           </Button>
         </div>
 
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex items-start gap-3 flex-1 min-w-0">
-            <div className="p-2.5 rounded-lg bg-primary/10 shrink-0">
-              <CodeIcon size={22} className="text-primary" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <h1 className="text-lg font-semibold tracking-tight text-foreground/90 truncate">{detail.name}</h1>
-              {detail.desc && (
-                <p className="text-[13px] text-muted-foreground mt-0.5">{detail.desc}</p>
+        <div className="flex items-start gap-3">
+          <div className="p-2.5 rounded-lg bg-primary/10 shrink-0">
+            <CodeIcon size={22} className="text-primary" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <h1 className="text-lg font-semibold tracking-tight text-foreground/90 truncate">{detail.name}</h1>
+            {detail.desc && (
+              <p className="text-[13px] text-muted-foreground mt-0.5">{detail.desc}</p>
+            )}
+            <div className="flex flex-wrap items-center gap-2 mt-2">
+              {detail.language && <Badge variant="secondary" className="text-xs">{detail.language}</Badge>}
+              {detail.framework && <Badge variant="outline" className="text-xs">{detail.framework}</Badge>}
+              {detail.source && (
+                <Badge variant="outline" className="text-xs cursor-pointer hover:bg-accent" onClick={() => BrowserOpenURL(`https://github.com/${detail.source}`)}>
+                  <LinkSquare02Icon size={11} className="mr-1" />
+                  {detail.source}
+                </Badge>
               )}
-              <div className="flex flex-wrap items-center gap-2 mt-2">
-                {detail.language && <Badge variant="secondary" className="text-xs">{detail.language}</Badge>}
-                {detail.framework && <Badge variant="outline" className="text-xs">{detail.framework}</Badge>}
-                {detail.source && (
-                  <Badge variant="outline" className="text-xs cursor-pointer hover:bg-accent" onClick={() => BrowserOpenURL(`https://github.com/${detail.source}`)}>
-                    <LinkSquare02Icon size={11} className="mr-1" />
-                    {detail.source}
-                  </Badge>
-                )}
-              </div>
+            </div>
+            <div className="mt-2">
+              <TagManager skillName={detail.name} tags={tags} onTagsChange={setTags} compact />
             </div>
           </div>
+        </div>
 
-          <div className="flex items-center gap-1.5 shrink-0">
-            <Button variant="outline" size="sm" className="h-8" onClick={() => setConfigDialogOpen(true)}>
-              <Settings02Icon size={14} className="mr-1.5" />
-              {t("config-agent-link")}
+        <div className="flex flex-wrap items-center gap-1.5 mt-3">
+          <Button variant="outline" size="sm" className={`h-7 text-[12px] ${isFavorite ? "text-amber-500 border-amber-500/40" : ""}`} onClick={async () => {
+            if (!skillName) return
+            const result = await ToggleFavorite(skillName)
+            setIsFavorite(result)
+          }}>
+            <FavouriteIcon size={13} className={`mr-1 ${isFavorite ? "fill-amber-500" : ""}`} />
+            {isFavorite ? t("remove-from-favorites") : t("add-to-favorites")}
+          </Button>
+          <Button variant="outline" size="sm" className="h-7 text-[12px]" onClick={handleOpenEditor}>
+            <Edit02Icon size={13} className="mr-1" />{t("edit-skill")}
+          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" className="h-7 text-[12px]">
+                <SourceCodeIcon size={13} className="mr-1" />{t("open-in-editor")}
+                <ArrowDown01Icon size={11} className="ml-0.5 opacity-60" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start">
+              {editors.map((editor) => (
+                <DropdownMenuItem key={editor.id} onClick={() => handleOpenInSystemEditor(editor.id)} className="text-[12px] gap-2">
+                  <EditorIcon icon={editor.icon} iconBase64={editor.iconBase64} />
+                  {editor.name}
+                </DropdownMenuItem>
+              ))}
+              {editors.length === 0 && (
+                <DropdownMenuItem disabled className="text-[12px] text-muted-foreground">
+                  {t("no-editor-found")}
+                </DropdownMenuItem>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+          {detail.source && (
+            <Button variant="outline" size="sm" className="h-7 text-[12px]" onClick={handleLoadDiff}>
+              <GitCompareIcon size={13} className="mr-1" />
+              {t("diff-preview")}
             </Button>
-            <Button variant="outline" size="sm" className="h-8" onClick={handleUpdate} disabled={updating}>
-              <RefreshIcon size={14} className={`mr-1.5 ${updating ? "animate-spin" : ""}`} />
-              {t("update")}
-            </Button>
-            <Button variant="outline" size="sm" className="h-8 text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => setShowDeleteDialog(true)}>
-              <Delete02Icon size={14} className="mr-1.5" />
-              {t("delete")}
-            </Button>
-          </div>
+          )}
+          <Button variant="outline" size="sm" className="h-7 text-[12px]" onClick={() => setConfigDialogOpen(true)}>
+            <Settings02Icon size={13} className="mr-1" />
+            {t("config-agent-link")}
+          </Button>
+          <Button variant="outline" size="sm" className="h-7 text-[12px]" onClick={handleUpdate} disabled={updating}>
+            <RefreshIcon size={13} className={`mr-1 ${updating ? "animate-spin" : ""}`} />
+            {t("update")}
+          </Button>
+          <Button variant="outline" size="sm" className="h-7 text-[12px] text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => setShowDeleteDialog(true)}>
+            <Delete02Icon size={13} className="mr-1" />
+            {t("delete")}
+          </Button>
         </div>
       </div>
 
@@ -306,8 +411,12 @@ const SkillDetailPage = () => {
 
           {/* SKILL.md content */}
           <div className="rounded-lg border border-border/50 overflow-hidden">
-            <div className="px-4 py-2.5 bg-muted/30 border-b border-border/50">
+            <div className="px-4 py-2.5 bg-muted/30 border-b border-border/50 flex items-center justify-between">
               <span className="text-[12px] font-medium text-muted-foreground">SKILL.md</span>
+              <Button variant="ghost" size="sm" className="h-6 px-2 text-[11px] text-muted-foreground hover:text-foreground" onClick={handleOpenEditor}>
+                <Edit02Icon size={12} className="mr-1" />
+                {t("edit-skill")}
+              </Button>
             </div>
             <div className="p-4 prose prose-sm dark:prose-invert max-w-none prose-headings:text-foreground/90 prose-p:text-foreground/75 prose-li:text-foreground/75 prose-code:text-primary prose-code:bg-primary/10 prose-code:rounded prose-code:px-1.5 prose-code:py-0.5 prose-code:text-[12px] prose-pre:bg-muted/50 prose-pre:border prose-pre:border-border/50 prose-a:text-primary prose-a:no-underline hover:prose-a:underline">
               <Markdown>{markdownBody || t("no-description")}</Markdown>
@@ -353,6 +462,70 @@ const SkillDetailPage = () => {
         saveLinks={handleSaveLinks}
         onSaved={() => skillName && loadDetail(skillName)}
       />
+
+      {/* Diff Preview dialog */}
+      <Dialog open={showDiffDialog} onOpenChange={(open) => { setShowDiffDialog(open); if (!open) setDiffData(null) }}>
+        <DialogContent className="max-w-3xl max-h-[80vh] flex flex-col overflow-hidden">
+          <DialogHeader>
+            <DialogTitle>{t("diff-preview")}</DialogTitle>
+            <DialogDescription>{t("diff-preview-desc")}</DialogDescription>
+          </DialogHeader>
+          {loadingDiff ? (
+            <div className="flex items-center justify-center py-12">
+              <RefreshIcon size={24} className="animate-spin text-muted-foreground" />
+              <span className="ml-2 text-sm text-muted-foreground">{t("loading-diff")}</span>
+            </div>
+          ) : diffData ? (
+            diffData.hasChanges ? (
+              <div className="flex-1 overflow-y-auto">
+                <div className="grid grid-cols-2 gap-0 border border-border/50 rounded overflow-hidden">
+                  <div>
+                    <div className="px-3 py-1.5 bg-red-500/10 border-b border-border/50 text-[11px] font-medium text-red-600 dark:text-red-400">{t("local-version")}</div>
+                    <pre className="p-3 text-[11px] font-mono text-foreground/70 overflow-x-auto whitespace-pre-wrap max-h-[50vh]">{diffData.localContent}</pre>
+                  </div>
+                  <div className="border-l border-border/50">
+                    <div className="px-3 py-1.5 bg-emerald-500/10 border-b border-border/50 text-[11px] font-medium text-emerald-600 dark:text-emerald-400">{t("remote-version")}</div>
+                    <pre className="p-3 text-[11px] font-mono text-foreground/70 overflow-x-auto whitespace-pre-wrap max-h-[50vh]">{diffData.remoteContent}</pre>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-8 text-center">
+                <p className="text-sm font-medium text-emerald-600 dark:text-emerald-400">{t("no-changes")}</p>
+              </div>
+            )
+          ) : null}
+        </DialogContent>
+      </Dialog>
+    </div>
+  )
+}
+
+const editorIcons: Record<string, { color: string; label: string }> = {
+  vscode: { color: "#007ACC", label: "VS" },
+  cursor: { color: "#000000", label: "Cu" },
+  codebuddy: { color: "#00D4AA", label: "CB" },
+  windsurf: { color: "#00C4B4", label: "Wi" },
+  zed: { color: "#F5A623", label: "Ze" },
+  sublime: { color: "#FF9800", label: "ST" },
+  idea: { color: "#E44332", label: "IJ" },
+  webstorm: { color: "#00CDD7", label: "WS" },
+  fleet: { color: "#7B61FF", label: "Fl" },
+  nova: { color: "#6A50D3", label: "No" },
+}
+
+const EditorIcon = ({ icon, iconBase64 }: { icon: string; iconBase64?: string }) => {
+  if (iconBase64) {
+    return <img src={iconBase64} alt={icon} className="w-5 h-5 rounded-[3px] shrink-0" />
+  }
+  const info = editorIcons[icon]
+  if (!info) return <SourceCodeIcon size={14} />
+  return (
+    <div
+      className="w-5 h-5 rounded-[3px] flex items-center justify-center text-white font-bold shrink-0"
+      style={{ backgroundColor: info.color, fontSize: "9px", lineHeight: 1 }}
+    >
+      {info.label}
     </div>
   )
 }

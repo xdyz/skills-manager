@@ -343,7 +343,6 @@ func (as *AgentService) syncSkillsToAgent(projectPath string, targetAgent *Agent
 		return
 	}
 
-	fmt.Printf("同步 %d 个 skills 到新启用的 agent [%s]\n", len(skillMap), targetAgent.Name)
 
 	for _, skill := range skillMap {
 		targetPath := filepath.Join(targetSkillsDir, skill.name)
@@ -356,16 +355,12 @@ func (as *AgentService) syncSkillsToAgent(projectPath string, targetAgent *Agent
 		if skill.isGlobal {
 			// 全局 skill：创建软链接
 			if err := os.Symlink(skill.sourcePath, targetPath); err != nil {
-				fmt.Printf("  ✗ 创建软链接失败 [%s -> %s]: %v\n", skill.name, targetAgent.Name, err)
 			} else {
-				fmt.Printf("  ✓ 同步软链接 [%s -> %s]\n", skill.name, targetAgent.Name)
 			}
 		} else {
 			// 本地 skill：复制目录
 			if err := copyDir(skill.sourcePath, targetPath); err != nil {
-				fmt.Printf("  ✗ 复制失败 [%s -> %s]: %v\n", skill.name, targetAgent.Name, err)
 			} else {
-				fmt.Printf("  ✓ 同步复制 [%s -> %s]\n", skill.name, targetAgent.Name)
 			}
 		}
 	}
@@ -408,7 +403,6 @@ func (as *AgentService) DisableProjectAgent(projectPath string, agentName string
 			return fmt.Errorf("agent directory is not empty, contains %d items", len(entries))
 		}
 		// 强制模式：清空目录中的所有 skills
-		fmt.Printf("强制禁用 Agent [%s]，清理 %d 个 skill\n", agentName, len(entries))
 		for _, entry := range entries {
 			entryPath := filepath.Join(agentDir, entry.Name())
 			if lstat, err := os.Lstat(entryPath); err == nil && lstat.Mode()&os.ModeSymlink != 0 {
@@ -428,7 +422,6 @@ func (as *AgentService) DisableProjectAgent(projectPath string, agentName string
 	if parentDir != projectPath && strings.HasPrefix(filepath.Base(parentDir), ".") {
 		if entries, err := os.ReadDir(parentDir); err == nil && len(entries) == 0 {
 			os.Remove(parentDir)
-			fmt.Printf("清理空父目录: %s\n", parentDir)
 		}
 	}
 

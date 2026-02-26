@@ -2,8 +2,10 @@ package services
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"os/exec"
@@ -12,6 +14,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 type SkillsService struct {
@@ -98,16 +102,17 @@ func (ss *SkillsService) Startup(ctx context.Context) {
 	ss.ctx = ctx
 }
 
-// shellRun 通过用户的 interactive login shell 执行命令，确保 GUI 应用能继承完整的 shell 环境
+// shellRun 通过用户的 login shell 执行命令，确保 GUI 应用能继承完整的 shell 环境
 // macOS GUI 应用不会加载 .zshrc，而 nvm 等工具的初始化脚本通常在 .zshrc 中
-// 使用 -i（interactive）确保 .zshrc 被加载，-l（login）确保 .zprofile 被加载
+// 使用 -l（login）+ -i（interactive）确保 .zprofile 和 .zshrc 都被加载
+// 注意：interactive 模式在非 tty 时可能产生额外输出，但能确保 nvm/rbenv 等工具可用
 func shellRun(command string) ([]byte, error) {
-	return exec.Command("/bin/zsh", "-li", "-c", command).CombinedOutput()
+	return exec.Command("/bin/zsh", "-l", "-c", "source ~/.zshrc 2>/dev/null; "+command).CombinedOutput()
 }
 
-// shellOutput 通过 interactive login shell 执行命令并返回 stdout
+// shellOutput 通过 login shell 执行命令并返回 stdout
 func shellOutput(command string) (string, error) {
-	out, err := exec.Command("/bin/zsh", "-li", "-c", command).Output()
+	out, err := exec.Command("/bin/zsh", "-l", "-c", "source ~/.zshrc 2>/dev/null; "+command).Output()
 	if err != nil {
 		return "", err
 	}
@@ -121,7 +126,6 @@ func (ss *SkillsService) GetAllAgentSkills() ([]Skills, error) {
 		return nil, err
 	}
 
-	fmt.Println("开始扫描 skills，主目录:", homeDir)
 
 	// 读取 .skills-lock 获取来源信息
 	centralSkillsDir := filepath.Join(homeDir, ".agents", "skills")
@@ -143,12 +147,10 @@ func (ss *SkillsService) GetAllAgentSkills() ([]Skills, error) {
 			continue // 该 agent 目录不存在，跳过
 		}
 
-		fmt.Printf("扫描 agent 目录: %s (%s)\n", agent.Name, agentSkillsDir)
 
 		// 读取该 agent 目录下的所有 skill
 		entries, err := os.ReadDir(agentSkillsDir)
 		if err != nil {
-			fmt.Printf("读取目录失败: %v\n", err)
 			continue // 读取失败，跳过
 		}
 
@@ -166,11 +168,9 @@ func (ss *SkillsService) GetAllAgentSkills() ([]Skills, error) {
 			// 检查是否是目录或软链接（软链接也需要处理）
 			info, err := os.Stat(skillPath)
 			if err != nil {
-				fmt.Printf("  - 跳过 %s: stat 失败 %v\n", skillName, err)
 				continue
 			}
 			if !info.IsDir() {
-				fmt.Printf("  - 跳过 %s: 不是目录\n", skillName)
 				continue
 			}
 
@@ -178,11 +178,9 @@ func (ss *SkillsService) GetAllAgentSkills() ([]Skills, error) {
 			skillMdPath := filepath.Join(skillPath, "SKILL.md")
 			content, err := os.ReadFile(skillMdPath)
 			if err != nil {
-				fmt.Printf("  - 跳过 %s: 没有 SKILL.md\n", skillName)
 				continue // 没有 SKILL.md，跳过
 			}
 
-			fmt.Printf("  ✓ 找到 skill: %s\n", skillName)
 
 			// 如果这个 skill 已经存在，只添加 agent 名称
 			if existingSkill, exists := skillsMap[skillName]; exists {
@@ -211,7 +209,6 @@ func (ss *SkillsService) GetAllAgentSkills() ([]Skills, error) {
 		skills = append(skills, *skill)
 	}
 
-	fmt.Printf("总共找到 %d 个 skills\n", len(skills))
 
 	return skills, nil
 }
@@ -338,7 +335,6 @@ func (ss *SkillsService) BatchDeleteSkills(skillNames []string) (int, error) {
 	for _, name := range skillNames {
 		if err := ss.DeleteSkill(name); err != nil {
 			lastErr = err
-			fmt.Printf("✗ 批量删除失败 [%s]: %v\n", name, err)
 		} else {
 			successCount++
 		}
@@ -356,7 +352,6 @@ func (ss *SkillsService) BatchUpdateSkillAgentLinks(skillNames []string, agents 
 	for _, name := range skillNames {
 		if err := ss.UpdateSkillAgentLinks(name, agents); err != nil {
 			lastErr = err
-			fmt.Printf("✗ 批量更新链接失败 [%s]: %v\n", name, err)
 		} else {
 			successCount++
 		}
@@ -373,7 +368,6 @@ func (ss *SkillsService) GetProjectSkills(projectPath string) ([]ProjectSkill, e
 		return []ProjectSkill{}, nil
 	}
 
-	fmt.Printf("扫描项目 skills: %s\n", projectPath)
 
 	homeDir, _ := os.UserHomeDir()
 	skillMap := make(map[string]*ProjectSkill) // 用 skill name 聚合多个 agent
@@ -429,7 +423,6 @@ func (ss *SkillsService) GetProjectSkills(projectPath string) ([]ProjectSkill, e
 			// 如果已经见过这个 skill，只追加 agent
 			if existing, ok := skillMap[skillName]; ok {
 				existing.Agents = append(existing.Agents, agent.Name)
-				fmt.Printf("  + [%s] %s (追加 agent)\n", agent.Name, skillName)
 				continue
 			}
 
@@ -460,7 +453,6 @@ func (ss *SkillsService) GetProjectSkills(projectPath string) ([]ProjectSkill, e
 
 			skillMap[skillName] = skill
 			order = append(order, skillName)
-			fmt.Printf("  ✓ [%s] %s (全局: %v)\n", agent.Name, skillName, isGlobal)
 		}
 	}
 
@@ -470,7 +462,6 @@ func (ss *SkillsService) GetProjectSkills(projectPath string) ([]ProjectSkill, e
 		skills = append(skills, *skillMap[name])
 	}
 
-	fmt.Printf("项目 %s 共找到 %d 个 skills\n", projectPath, len(skills))
 	return skills, nil
 }
 
@@ -480,15 +471,12 @@ func (ss *SkillsService) FindRemoteSkills(query string) ([]RemoteSkill, error) {
 		return []RemoteSkill{}, nil
 	}
 
-	fmt.Printf("搜索远程 skills: %s\n", query)
 
 	// 使用 skills.sh API 搜索（支持 limit 参数，默认返回 20 条）
 	apiURL := fmt.Sprintf("https://skills.sh/api/search?q=%s&limit=30", query)
-	fmt.Printf("请求 API: %s\n", apiURL)
 
 	resp, err := httpGet(apiURL)
 	if err != nil {
-		fmt.Printf("API 请求失败: %v，回退到 CLI\n", err)
 		return ss.findRemoteSkillsFallback(query)
 	}
 
@@ -503,7 +491,6 @@ func (ss *SkillsService) FindRemoteSkills(query string) ([]RemoteSkill, error) {
 		Count int `json:"count"`
 	}
 	if err := json.Unmarshal(resp, &apiResp); err != nil {
-		fmt.Printf("解析 API 响应失败: %v，回退到 CLI\n", err)
 		return ss.findRemoteSkillsFallback(query)
 	}
 
@@ -536,7 +523,6 @@ func (ss *SkillsService) FindRemoteSkills(query string) ([]RemoteSkill, error) {
 	if data, err := os.ReadFile(skillsLockPath); err == nil {
 		if lock, err := unmarshalSkillsLock(data); err == nil {
 			installedSkills = lock.Skills
-			fmt.Printf("读取到 %d 个已安装的 skills\n", len(installedSkills))
 		}
 	}
 
@@ -547,7 +533,6 @@ func (ss *SkillsService) FindRemoteSkills(query string) ([]RemoteSkill, error) {
 			expectedSource := fmt.Sprintf("%s/%s", skills[i].Owner, skills[i].Repo)
 			if entry.Source == expectedSource {
 				skills[i].Installed = true
-				fmt.Printf("  ✓ %s (已安装)\n", skills[i].FullName)
 			}
 		}
 	}
@@ -555,13 +540,11 @@ func (ss *SkillsService) FindRemoteSkills(query string) ([]RemoteSkill, error) {
 	// 并发检测每个 skill 支持哪些 agent
 	checkSkillSupportedAgents(skills)
 
-	fmt.Printf("找到 %d 个远程 skills\n", len(skills))
 	return skills, nil
 }
 
 // findRemoteSkillsFallback 回退到 CLI 搜索
 func (ss *SkillsService) findRemoteSkillsFallback(query string) ([]RemoteSkill, error) {
-	fmt.Println("使用 npx skills find 回退搜索")
 	output, err := shellRun(fmt.Sprintf("npx skills find '%s'", query))
 	if err != nil {
 		return nil, fmt.Errorf("failed to search remote skills: %v", err)
@@ -659,9 +642,7 @@ func checkSkillSupportedAgents(skills []RemoteSkill) {
 			innerWg.Wait()
 
 			if len(s.SupportedAgents) == 0 {
-				fmt.Printf("  ⚠ %s: 未检测到支持的 agent 文件\n", s.FullName)
 			} else {
-				fmt.Printf("  ✓ %s: 支持 %v\n", s.FullName, s.SupportedAgents)
 			}
 		}(i)
 	}
@@ -682,8 +663,6 @@ func parseRemoteSkillsOutput(output string) []RemoteSkill {
 	ansiRegex := regexp.MustCompile(`\x1b\[[0-9;]*m`)
 	cleanOutput := ansiRegex.ReplaceAllString(output, "")
 
-	fmt.Println("清理后的输出:")
-	fmt.Println(cleanOutput)
 
 	// 正则匹配格式：owner/repo@skill-name
 	// 例如：vercel-labs/agent-skills@vercel-react-best-practices
@@ -716,12 +695,10 @@ func parseRemoteSkillsOutput(output string) []RemoteSkill {
 				Repo:     matches[2],
 				Name:     matches[3],
 			}
-			fmt.Printf("  解析到 skill: %s\n", matches[0])
 		} else if currentSkill != nil && strings.Contains(line, "└") {
 			// 匹配 URL 行
 			if matches := urlRegex.FindStringSubmatch(line); len(matches) == 2 {
 				currentSkill.URL = matches[1]
-				fmt.Printf("    URL: %s\n", matches[1])
 			}
 		} else if currentSkill != nil && line != "" && !strings.Contains(line, "└") {
 			// 非空行且不是 URL 行，视为描述信息（find-skills-plus 特有）
@@ -732,7 +709,6 @@ func parseRemoteSkillsOutput(output string) []RemoteSkill {
 				} else {
 					currentSkill.Description = line
 				}
-				fmt.Printf("    Description: %s\n", line)
 			}
 		}
 	}
@@ -747,7 +723,6 @@ func parseRemoteSkillsOutput(output string) []RemoteSkill {
 
 // InstallRemoteSkill 安装远程 skill 并创建软链接到所有 agent 目录
 func (ss *SkillsService) InstallRemoteSkill(fullName string, agents []string) error {
-	fmt.Printf("安装远程 skill: %s\n", fullName)
 
 	// 获取用户主目录
 	homeDir, err := os.UserHomeDir()
@@ -762,7 +737,6 @@ func (ss *SkillsService) InstallRemoteSkill(fullName string, agents []string) er
 		return fmt.Errorf("invalid skill name format: %s", fullName)
 	}
 	skillName := parts[1]
-	fmt.Printf("Skill 名称: %s\n", skillName)
 
 	// 中央 skills 目录
 	centralSkillsDir := filepath.Join(homeDir, ".agents", "skills")
@@ -775,7 +749,6 @@ func (ss *SkillsService) InstallRemoteSkill(fullName string, agents []string) er
 
 	// 检查是否已存在
 	if _, err := os.Stat(targetPath); err == nil {
-		fmt.Printf("⚠ Skill 已存在，将重新安装: %s\n", targetPath)
 		os.RemoveAll(targetPath)
 	}
 
@@ -785,7 +758,6 @@ func (ss *SkillsService) InstallRemoteSkill(fullName string, agents []string) er
 	// 使用 git clone 直接下载到目标位置
 	// 格式: https://github.com/owner/repo.git
 	repoURL := fmt.Sprintf("https://github.com/%s.git", ownerRepo)
-	fmt.Printf("从 GitHub 克隆: %s\n", repoURL)
 
 	// 临时克隆整个仓库
 	tempRepoDir := filepath.Join(os.TempDir(), "skills-temp-"+skillName)
@@ -796,30 +768,25 @@ func (ss *SkillsService) InstallRemoteSkill(fullName string, agents []string) er
 	if err != nil {
 		return fmt.Errorf("failed to clone repository: %v\nOutput: %s", err, string(cloneOutput))
 	}
-	fmt.Printf("✓ 仓库克隆成功\n")
 
 	// 查找 skill 目录（在仓库中的位置）- 使用通用查找函数
 	skillSourcePath := findSkillInRepo(tempRepoDir, skillName)
 	if skillSourcePath == "" {
 		return fmt.Errorf("skill not found in repository: %s", skillName)
 	}
-	fmt.Printf("✓ 找到 skill 目录: %s\n", skillSourcePath)
 
 	// 复制 skill 到目标位置
 	if err := copyDir(skillSourcePath, targetPath); err != nil {
 		return fmt.Errorf("failed to copy skill: %v", err)
 	}
 
-	fmt.Printf("✓ 成功安装 skill 到: %s\n", targetPath)
 
 	// 更新 .skills-lock 文件
 	if err := ss.updateSkillsLock(centralSkillsDir, skillName, ownerRepo); err != nil {
-		fmt.Printf("⚠ 更新 .skills-lock 文件失败: %v\n", err)
 	}
 
 	// 为指定的 agent 目录创建软链接
 	if err := ss.createSymlinksForSkill(skillName, targetPath, agents); err != nil {
-		fmt.Printf("创建软链接时出现警告: %v\n", err)
 	}
 
 	return nil
@@ -936,22 +903,18 @@ func (ss *SkillsService) createSymlinksForSkill(skillName string, sourcePath str
 				os.Remove(linkPath)
 			} else {
 				// 是实际目录，不删除
-				fmt.Printf("  ⚠ 跳过 [%s]: 已存在实际目录\n", agent.Name)
 				continue
 			}
 		}
 
 		// 创建软链接
 		if err := os.Symlink(sourcePath, linkPath); err != nil {
-			fmt.Printf("  ✗ 创建软链接失败 [%s]: %v\n", agent.Name, err)
 			errorCount++
 		} else {
-			fmt.Printf("  ✓ 创建软链接 [%s]\n", agent.Name)
 			successCount++
 		}
 	}
 
-	fmt.Printf("软链接创建完成: 成功 %d, 失败 %d\n", successCount, errorCount)
 	return nil
 }
 
@@ -1015,7 +978,6 @@ func (ss *SkillsService) UpdateSkillAgentLinks(skillName string, agents []string
 		return fmt.Errorf("skill not found: %s", skillName)
 	}
 
-	fmt.Printf("更新 skill '%s' 的 agent 链接配置\n", skillName)
 
 	// 构建目标 agent 集合
 	agentSet := make(map[string]bool)
@@ -1046,27 +1008,21 @@ func (ss *SkillsService) UpdateSkillAgentLinks(skillName string, agents []string
 		if shouldExist && !linkExists {
 			// 需要创建软链接
 			if err := os.MkdirAll(agentSkillsDir, 0755); err != nil {
-				fmt.Printf("  ✗ 创建目录失败 [%s]: %v\n", agent.Name, err)
 				continue
 			}
 			if err := os.Symlink(skillSourcePath, linkPath); err != nil {
-				fmt.Printf("  ✗ 创建软链接失败 [%s]: %v\n", agent.Name, err)
 			} else {
-				fmt.Printf("  ✓ 创建软链接 [%s]\n", agent.Name)
 				addedCount++
 			}
 		} else if !shouldExist && linkExists {
 			// 需要删除软链接
 			if err := os.Remove(linkPath); err != nil {
-				fmt.Printf("  ✗ 删除软链接失败 [%s]: %v\n", agent.Name, err)
 			} else {
-				fmt.Printf("  ✓ 删除软链接 [%s]\n", agent.Name)
 				removedCount++
 			}
 		}
 	}
 
-	fmt.Printf("更新完成: 新增 %d, 删除 %d\n", addedCount, removedCount)
 	return nil
 }
 
@@ -1096,7 +1052,6 @@ func (ss *SkillsService) UpdateProjectSkillAgentLinks(projectPath string, skillN
 	homeDir, _ := os.UserHomeDir()
 	centralSkillsDir := filepath.Join(homeDir, ".agents", "skills")
 
-	fmt.Printf("更新项目 skill '%s' 的 agent 链接: %s\n", skillName, projectPath)
 
 	agentSet := make(map[string]bool)
 	for _, name := range agents {
@@ -1148,24 +1103,19 @@ func (ss *SkillsService) UpdateProjectSkillAgentLinks(projectPath string, skillN
 		if shouldExist && !exists {
 			// 创建目录
 			if err := os.MkdirAll(agentSkillsDir, 0755); err != nil {
-				fmt.Printf("  ✗ 创建目录失败 [%s]: %v\n", agent.Name, err)
 				continue
 			}
 
 			if isGlobalSource {
 				// 全局 skill：创建软链接
 				if err := os.Symlink(sourceSkillPath, skillPath); err != nil {
-					fmt.Printf("  ✗ 创建软链接失败 [%s]: %v\n", agent.Name, err)
 				} else {
-					fmt.Printf("  ✓ 创建软链接 [%s]\n", agent.Name)
 					addedCount++
 				}
 			} else {
 				// 项目本地 skill：复制目录
 				if err := copyDir(sourceSkillPath, skillPath); err != nil {
-					fmt.Printf("  ✗ 复制目录失败 [%s]: %v\n", agent.Name, err)
 				} else {
-					fmt.Printf("  ✓ 复制目录 [%s]\n", agent.Name)
 					addedCount++
 				}
 			}
@@ -1176,12 +1126,10 @@ func (ss *SkillsService) UpdateProjectSkillAgentLinks(projectPath string, skillN
 			} else {
 				os.RemoveAll(skillPath)
 			}
-			fmt.Printf("  ✓ 移除 [%s]\n", agent.Name)
 			removedCount++
 		}
 	}
 
-	fmt.Printf("项目 skill agent 更新完成: 新增 %d, 删除 %d\n", addedCount, removedCount)
 	return nil
 }
 
@@ -1200,7 +1148,6 @@ func (ss *SkillsService) DeleteSkill(skillName string) error {
 		return fmt.Errorf("skill not found: %s", skillName)
 	}
 
-	fmt.Printf("开始删除 skill: %s\n", skillName)
 
 	// 1. 删除所有 agent 目录中的软链接
 	deletedLinks := 0
@@ -1215,7 +1162,6 @@ func (ss *SkillsService) DeleteSkill(skillName string) error {
 			if stat.Mode()&os.ModeSymlink != 0 {
 				// 是软链接，删除
 				if err := os.Remove(linkPath); err == nil {
-					fmt.Printf("  ✓ 删除软链接 [%s]\n", agent.Name)
 					deletedLinks++
 				}
 			}
@@ -1226,7 +1172,6 @@ func (ss *SkillsService) DeleteSkill(skillName string) error {
 	if err := os.RemoveAll(skillPath); err != nil {
 		return fmt.Errorf("failed to delete skill directory: %v", err)
 	}
-	fmt.Printf("✓ 删除 skill 目录: %s\n", skillPath)
 
 	// 3. 更新 .skills-lock 文件
 	lockPath := filepath.Join(centralSkillsDir, ".skills-lock")
@@ -1235,12 +1180,10 @@ func (ss *SkillsService) DeleteSkill(skillName string) error {
 			delete(lock.Skills, skillName)
 			if data, err := json.MarshalIndent(lock, "", "  "); err == nil {
 				os.WriteFile(lockPath, data, 0644)
-				fmt.Printf("✓ 更新 .skills-lock 文件\n")
 			}
 		}
 	}
 
-	fmt.Printf("删除完成: 删除了 %d 个软链接\n", deletedLinks)
 	return nil
 }
 
@@ -1270,30 +1213,23 @@ func (ss *SkillsService) UpdateSkill(skillName string) error {
 		return fmt.Errorf("skill not found in .skills-lock: %s", skillName)
 	}
 
-	fmt.Printf("开始更新 skill: %s (来源: %s)\n", skillName, entry.Source)
-
-	// 构造 fullName (owner/repo@skill-name)
-	fullName := fmt.Sprintf("%s@%s", entry.Source, skillName)
 
 	// 删除旧版本
 	skillPath := filepath.Join(centralSkillsDir, skillName)
 	if err := os.RemoveAll(skillPath); err != nil {
 		return fmt.Errorf("failed to remove old version: %v", err)
 	}
-	fmt.Printf("✓ 删除旧版本\n")
 
 	// 重新安装（复用 InstallRemoteSkill 的逻辑）
 	tempRepoDir := filepath.Join(os.TempDir(), "skills-temp-"+skillName)
 	defer os.RemoveAll(tempRepoDir)
 
 	repoURL := fmt.Sprintf("https://github.com/%s.git", entry.Source)
-	fmt.Printf("从 GitHub 克隆: %s\n", repoURL)
 
 	cloneOutput, err := shellRun(fmt.Sprintf("git clone --depth 1 '%s' '%s'", repoURL, tempRepoDir))
 	if err != nil {
 		return fmt.Errorf("failed to clone repository: %v\nOutput: %s", err, string(cloneOutput))
 	}
-	fmt.Printf("✓ 仓库克隆成功\n")
 
 	// 查找 skill 目录（复用 findSkillInRepo 的完整查找逻辑）
 	skillSourcePath := findSkillInRepo(tempRepoDir, skillName)
@@ -1305,14 +1241,11 @@ func (ss *SkillsService) UpdateSkill(skillName string) error {
 	if err := copyDir(skillSourcePath, skillPath); err != nil {
 		return fmt.Errorf("failed to copy skill: %v", err)
 	}
-	fmt.Printf("✓ 复制新版本成功\n")
 
 	// 更新 .skills-lock 中的 updatedAt 时间
 	if err := ss.updateSkillsLock(centralSkillsDir, skillName, entry.Source); err != nil {
-		fmt.Printf("⚠ 更新 .skills-lock 文件失败: %v\n", err)
 	}
 
-	fmt.Printf("更新完成: %s\n", fullName)
 	return nil
 }
 
@@ -1336,7 +1269,6 @@ func (ss *SkillsService) InstallSkillToProject(projectPath string, skillName str
 		return fmt.Errorf("global skill not found: %s", skillName)
 	}
 
-	fmt.Printf("安装 skill '%s' 到项目: %s\n", skillName, projectPath)
 
 	// 构建要安装的 agent 集合
 	agentSet := make(map[string]bool)
@@ -1355,7 +1287,6 @@ func (ss *SkillsService) InstallSkillToProject(projectPath string, skillName str
 
 		// 确保 agent 目录存在
 		if err := os.MkdirAll(agentSkillsDir, 0755); err != nil {
-			fmt.Printf("  ✗ 创建目录失败 [%s]: %v\n", agent.Name, err)
 			continue
 		}
 
@@ -1366,21 +1297,17 @@ func (ss *SkillsService) InstallSkillToProject(projectPath string, skillName str
 			if stat.Mode()&os.ModeSymlink != 0 {
 				os.Remove(linkPath)
 			} else {
-				fmt.Printf("  ⚠ 跳过 [%s]: 已存在实际目录\n", agent.Name)
 				continue
 			}
 		}
 
 		// 创建软链接
 		if err := os.Symlink(skillSourcePath, linkPath); err != nil {
-			fmt.Printf("  ✗ 创建软链接失败 [%s]: %v\n", agent.Name, err)
 		} else {
-			fmt.Printf("  ✓ 创建软链接 [%s]: %s -> %s\n", agent.Name, linkPath, skillSourcePath)
 			successCount++
 		}
 	}
 
-	fmt.Printf("项目安装完成: 成功为 %d 个 agent 创建软链接\n", successCount)
 	return nil
 }
 
@@ -1390,7 +1317,6 @@ func (ss *SkillsService) InstallRemoteSkillToProject(projectPath string, fullNam
 		return fmt.Errorf("project path and skill full name are required")
 	}
 
-	fmt.Printf("从远程安装 skill 到项目: %s -> %s\n", fullName, projectPath)
 
 	// 解析 fullName: owner/repo@skill-name
 	parts := strings.Split(fullName, "@")
@@ -1407,19 +1333,16 @@ func (ss *SkillsService) InstallRemoteSkillToProject(projectPath string, fullNam
 	os.RemoveAll(tempRepoDir)
 	defer os.RemoveAll(tempRepoDir)
 
-	fmt.Printf("从 GitHub 克隆: %s\n", repoURL)
 	cloneOutput, err := shellRun(fmt.Sprintf("git clone --depth 1 '%s' '%s'", repoURL, tempRepoDir))
 	if err != nil {
 		return fmt.Errorf("failed to clone repository: %v\nOutput: %s", err, string(cloneOutput))
 	}
-	fmt.Printf("✓ 仓库克隆成功\n")
 
 	// 查找 skill 目录 - 使用通用查找函数
 	skillSourcePath := findSkillInRepo(tempRepoDir, skillName)
 	if skillSourcePath == "" {
 		return fmt.Errorf("skill not found in repository: %s", skillName)
 	}
-	fmt.Printf("✓ 找到 skill 目录: %s\n", skillSourcePath)
 
 	// 构建要安装的 agent 集合
 	agentSet := make(map[string]bool)
@@ -1438,7 +1361,6 @@ func (ss *SkillsService) InstallRemoteSkillToProject(projectPath string, fullNam
 		agentSkillsDir := filepath.Join(projectPath, agent.LocalPath)
 
 		if err := os.MkdirAll(agentSkillsDir, 0755); err != nil {
-			fmt.Printf("  ✗ 创建目录失败 [%s]: %v\n", agent.Name, err)
 			continue
 		}
 
@@ -1451,14 +1373,11 @@ func (ss *SkillsService) InstallRemoteSkillToProject(projectPath string, fullNam
 
 		// 复制 skill 文件到项目目录
 		if err := copyDir(skillSourcePath, targetPath); err != nil {
-			fmt.Printf("  ✗ 复制失败 [%s]: %v\n", agent.Name, err)
 		} else {
-			fmt.Printf("  ✓ 安装到项目 [%s]: %s\n", agent.Name, targetPath)
 			successCount++
 		}
 	}
 
-	fmt.Printf("项目安装完成: 成功为 %d 个 agent 安装 skill\n", successCount)
 	return nil
 }
 
@@ -1557,7 +1476,6 @@ func (ss *SkillsService) RemoveSkillFromProject(projectPath string, skillName st
 		return fmt.Errorf("project path and skill name are required")
 	}
 
-	fmt.Printf("从项目中移除 skill '%s': %s\n", skillName, projectPath)
 
 	removedCount := 0
 	for _, agent := range getAllAgentConfigs() {
@@ -1567,21 +1485,1465 @@ func (ss *SkillsService) RemoveSkillFromProject(projectPath string, skillName st
 		if stat, err := os.Lstat(linkPath); err == nil {
 			if stat.Mode()&os.ModeSymlink != 0 {
 				if err := os.Remove(linkPath); err == nil {
-					fmt.Printf("  ✓ 删除软链接 [%s]\n", agent.Name)
 					removedCount++
 				}
 			} else if stat.IsDir() {
 				// 项目本地的 skill 目录（非软链接），也可以删除
 				if err := os.RemoveAll(linkPath); err == nil {
-					fmt.Printf("  ✓ 删除本地 skill [%s]\n", agent.Name)
 					removedCount++
 				}
 			}
 		}
 	}
 
-	fmt.Printf("项目移除完成: 删除了 %d 个\n", removedCount)
 	return nil
+}
+
+// ---- 版本检测与更新提醒 ----
+
+// SkillUpdateInfo 单个 skill 的更新信息
+type SkillUpdateInfo struct {
+	Name       string `json:"name"`
+	Source     string `json:"source"`
+	HasUpdate  bool   `json:"hasUpdate"`
+	CurrentSHA string `json:"currentSHA"`
+	LatestSHA  string `json:"latestSHA"`
+}
+
+// CheckSkillUpdates 检查所有已安装 skill 是否有更新
+// 通过 GitHub API 获取最新 commit SHA 与本地记录的对比
+func (ss *SkillsService) CheckSkillUpdates() ([]SkillUpdateInfo, error) {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get home directory: %v", err)
+	}
+
+	centralSkillsDir := filepath.Join(homeDir, ".agents", "skills")
+	lockPath := filepath.Join(centralSkillsDir, ".skills-lock")
+
+	data, err := os.ReadFile(lockPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read .skills-lock: %v", err)
+	}
+
+	lock, err := unmarshalSkillsLock(data)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse .skills-lock: %v", err)
+	}
+
+	if len(lock.Skills) == 0 {
+		return []SkillUpdateInfo{}, nil
+	}
+
+	// 并发检测每个 skill 是否有更新
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	var results []SkillUpdateInfo
+
+	client := &http.Client{Timeout: 10 * time.Second}
+
+	for skillName, entry := range lock.Skills {
+		if entry.Source == "" {
+			continue
+		}
+		wg.Add(1)
+		go func(name string, e SkillLockEntry) {
+			defer wg.Done()
+			info := SkillUpdateInfo{
+				Name:   name,
+				Source: e.Source,
+			}
+
+			// 获取本地文件的修改时间作为参考 (updatedAt)
+			localUpdatedAt := e.UpdatedAt
+
+			// 通过 GitHub API 获取最新 commit
+			// GET https://api.github.com/repos/{owner}/{repo}/commits?path=skills/{skillName}&per_page=1
+			apiURL := fmt.Sprintf("https://api.github.com/repos/%s/commits?path=skills/%s&per_page=1", e.Source, name)
+			req, err := http.NewRequest("GET", apiURL, nil)
+			if err != nil {
+				mu.Lock()
+				results = append(results, info)
+				mu.Unlock()
+				return
+			}
+			req.Header.Set("Accept", "application/vnd.github.v3+json")
+
+			resp, err := client.Do(req)
+			if err != nil {
+				mu.Lock()
+				results = append(results, info)
+				mu.Unlock()
+				return
+			}
+			defer resp.Body.Close()
+
+			if resp.StatusCode != 200 {
+				mu.Lock()
+				results = append(results, info)
+				mu.Unlock()
+				return
+			}
+
+			body, err := io.ReadAll(resp.Body)
+			if err != nil {
+				mu.Lock()
+				results = append(results, info)
+				mu.Unlock()
+				return
+			}
+
+			var commits []struct {
+				SHA    string `json:"sha"`
+				Commit struct {
+					Committer struct {
+						Date string `json:"date"`
+					} `json:"committer"`
+				} `json:"commit"`
+			}
+			if err := json.Unmarshal(body, &commits); err != nil || len(commits) == 0 {
+				// 尝试不带 path 参数（仓库根就是 skill 的情况）
+				apiURL2 := fmt.Sprintf("https://api.github.com/repos/%s/commits?per_page=1", e.Source)
+				req2, _ := http.NewRequest("GET", apiURL2, nil)
+				req2.Header.Set("Accept", "application/vnd.github.v3+json")
+				resp2, err2 := client.Do(req2)
+				if err2 != nil {
+					mu.Lock()
+					results = append(results, info)
+					mu.Unlock()
+					return
+				}
+				defer resp2.Body.Close()
+				body2, _ := io.ReadAll(resp2.Body)
+				if err := json.Unmarshal(body2, &commits); err != nil || len(commits) == 0 {
+					mu.Lock()
+					results = append(results, info)
+					mu.Unlock()
+					return
+				}
+			}
+
+			latestSHA := commits[0].SHA
+			latestDate := commits[0].Commit.Committer.Date
+			info.LatestSHA = latestSHA
+
+			// 比较远程 commit 时间与本地 updatedAt
+			if localUpdatedAt != "" && latestDate != "" {
+				localTime, err1 := time.Parse(time.RFC3339, localUpdatedAt)
+				remoteTime, err2 := time.Parse(time.RFC3339, latestDate)
+				if err1 == nil && err2 == nil {
+					if remoteTime.After(localTime) {
+						info.HasUpdate = true
+					} else {
+					}
+				}
+			}
+
+			mu.Lock()
+			results = append(results, info)
+			mu.Unlock()
+		}(skillName, entry)
+	}
+
+	wg.Wait()
+	return results, nil
+}
+
+// ---- 导入/导出配置 ----
+
+// ExportedConfig 导出配置的结构
+type ExportedConfig struct {
+	Version      int               `json:"version"`
+	ExportedAt   string            `json:"exportedAt"`
+	Skills       []ExportedSkill   `json:"skills"`
+	CustomAgents []CustomAgentConfig `json:"customAgents"`
+}
+
+// ExportedSkill 导出的单个 skill 信息
+type ExportedSkill struct {
+	FullName     string   `json:"fullName"`     // owner/repo@skill-name
+	LinkedAgents []string `json:"linkedAgents"` // 链接到的 agent 列表
+}
+
+// ExportConfig 导出当前所有配置（已安装 skills + agent 链接 + 自定义 agents）
+func (ss *SkillsService) ExportConfig() (*ExportedConfig, error) {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get home directory: %v", err)
+	}
+
+	centralSkillsDir := filepath.Join(homeDir, ".agents", "skills")
+	lockPath := filepath.Join(centralSkillsDir, ".skills-lock")
+
+	// 读取 .skills-lock
+	var lock SkillsLock
+	if data, err := os.ReadFile(lockPath); err == nil {
+		lock, _ = unmarshalSkillsLock(data)
+	}
+
+	// 收集所有 skill 信息
+	var exportedSkills []ExportedSkill
+	if lock.Skills != nil {
+		for skillName, entry := range lock.Skills {
+			fullName := fmt.Sprintf("%s@%s", entry.Source, skillName)
+			// 获取链接的 agents
+			agents, _ := ss.GetSkillAgentLinks(skillName)
+			exportedSkills = append(exportedSkills, ExportedSkill{
+				FullName:     fullName,
+				LinkedAgents: agents,
+			})
+		}
+	}
+
+	// 读取自定义 agents
+	customAgents, _ := loadCustomAgents()
+
+	config := &ExportedConfig{
+		Version:      1,
+		ExportedAt:   time.Now().Format(time.RFC3339),
+		Skills:       exportedSkills,
+		CustomAgents: customAgents,
+	}
+
+	return config, nil
+}
+
+// ExportConfigToFile 导出配置到用户选择的文件（使用原生文件对话框）
+// 返回保存的文件路径，空字符串表示用户取消
+func (ss *SkillsService) ExportConfigToFile() (string, error) {
+	config, err := ss.ExportConfig()
+	if err != nil {
+		return "", err
+	}
+
+	data, err := json.MarshalIndent(config, "", "  ")
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal config: %v", err)
+	}
+
+	defaultFilename := fmt.Sprintf("skills-manager-config-%s.json", time.Now().Format("2006-01-02"))
+
+	savePath, err := wailsRuntime.SaveFileDialog(ss.ctx, wailsRuntime.SaveDialogOptions{
+		DefaultFilename: defaultFilename,
+		Title:           "导出配置",
+		Filters: []wailsRuntime.FileFilter{
+			{DisplayName: "JSON Files", Pattern: "*.json"},
+		},
+	})
+	if err != nil {
+		return "", fmt.Errorf("save dialog error: %v", err)
+	}
+	if savePath == "" {
+		return "", nil // 用户取消
+	}
+
+	if err := os.WriteFile(savePath, data, 0644); err != nil {
+		return "", fmt.Errorf("failed to write file: %v", err)
+	}
+
+	return savePath, nil
+}
+
+// ImportResult 导入结果
+type ImportResult struct {
+	InstalledCount int `json:"installedCount"`
+	SkippedCount   int `json:"skippedCount"`
+	FailedCount    int `json:"failedCount"`
+}
+
+// ImportConfig 导入配置（安装缺失的 skills + 恢复 agent 链接 + 恢复自定义 agents）
+func (ss *SkillsService) ImportConfig(configJSON string) (*ImportResult, error) {
+	var config ExportedConfig
+	if err := json.Unmarshal([]byte(configJSON), &config); err != nil {
+		return nil, fmt.Errorf("invalid config format: %v", err)
+	}
+
+
+	// 1. 导入自定义 agents
+	if len(config.CustomAgents) > 0 {
+		existingCustoms, _ := loadCustomAgents()
+		existingNames := make(map[string]bool)
+		for _, c := range existingCustoms {
+			existingNames[c.Name] = true
+		}
+		for _, c := range config.CustomAgents {
+			if !existingNames[c.Name] {
+				existingCustoms = append(existingCustoms, c)
+			} else {
+			}
+		}
+		if err := saveCustomAgents(existingCustoms); err != nil {
+		}
+	}
+
+	// 2. 安装缺失的 skills 并恢复 agent 链接
+	homeDir, _ := os.UserHomeDir()
+	centralSkillsDir := filepath.Join(homeDir, ".agents", "skills")
+
+	result := &ImportResult{}
+
+	for _, skill := range config.Skills {
+		// 解析 fullName
+		parts := strings.Split(skill.FullName, "@")
+		if len(parts) != 2 {
+			result.FailedCount++
+			continue
+		}
+		skillName := parts[1]
+		skillPath := filepath.Join(centralSkillsDir, skillName)
+
+		// 检查是否已安装
+		if _, err := os.Stat(skillPath); err == nil {
+			if len(skill.LinkedAgents) > 0 {
+				ss.UpdateSkillAgentLinks(skillName, skill.LinkedAgents)
+			}
+			result.SkippedCount++
+			continue
+		}
+
+		// 安装 skill
+		if err := ss.InstallRemoteSkill(skill.FullName, skill.LinkedAgents); err != nil {
+			result.FailedCount++
+			continue
+		}
+		result.InstalledCount++
+	}
+
+	return result, nil
+}
+
+// ---- 标签/分类系统 ----
+
+// SkillTagsConfig 标签持久化结构
+type SkillTagsConfig struct {
+	Tags map[string][]string `json:"tags"` // skill name -> tag list
+}
+
+func getTagsFilePath() (string, error) {
+	configDir, err := getConfigDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(configDir, "skill-tags.json"), nil
+}
+
+func loadSkillTags() (SkillTagsConfig, error) {
+	filePath, err := getTagsFilePath()
+	if err != nil {
+		return SkillTagsConfig{Tags: make(map[string][]string)}, err
+	}
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return SkillTagsConfig{Tags: make(map[string][]string)}, nil
+	}
+	var config SkillTagsConfig
+	if err := json.Unmarshal(data, &config); err != nil {
+		return SkillTagsConfig{Tags: make(map[string][]string)}, nil
+	}
+	if config.Tags == nil {
+		config.Tags = make(map[string][]string)
+	}
+	return config, nil
+}
+
+func saveSkillTags(config SkillTagsConfig) error {
+	filePath, err := getTagsFilePath()
+	if err != nil {
+		return err
+	}
+	data, err := json.MarshalIndent(config, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(filePath, data, 0644)
+}
+
+// GetSkillTags 获取某个 skill 的标签
+func (ss *SkillsService) GetSkillTags(skillName string) ([]string, error) {
+	config, err := loadSkillTags()
+	if err != nil {
+		return []string{}, err
+	}
+	tags, ok := config.Tags[skillName]
+	if !ok {
+		return []string{}, nil
+	}
+	return tags, nil
+}
+
+// SetSkillTags 设置某个 skill 的标签
+func (ss *SkillsService) SetSkillTags(skillName string, tags []string) error {
+	config, err := loadSkillTags()
+	if err != nil {
+		return err
+	}
+	if len(tags) == 0 {
+		delete(config.Tags, skillName)
+	} else {
+		config.Tags[skillName] = tags
+	}
+	return saveSkillTags(config)
+}
+
+// GetAllTags 获取所有已使用的标签及其 skill 列表
+func (ss *SkillsService) GetAllTags() (map[string][]string, error) {
+	config, err := loadSkillTags()
+	if err != nil {
+		return nil, err
+	}
+	// 反转: tag -> skill names
+	tagMap := make(map[string][]string)
+	for skillName, tags := range config.Tags {
+		for _, tag := range tags {
+			tagMap[tag] = append(tagMap[tag], skillName)
+		}
+	}
+	return tagMap, nil
+}
+
+// GetAllSkillTagsMap 获取所有 skill 的标签映射
+func (ss *SkillsService) GetAllSkillTagsMap() (map[string][]string, error) {
+	config, err := loadSkillTags()
+	if err != nil {
+		return nil, err
+	}
+	return config.Tags, nil
+}
+
+// ---- Agent 健康检查 ----
+
+// HealthCheckResult 健康检查结果
+type HealthCheckResult struct {
+	BrokenLinks   []BrokenLink   `json:"brokenLinks"`
+	OrphanSkills  []string       `json:"orphanSkills"`  // 没有链接到任何 agent 的 skills
+	UnknownFiles  []UnknownFile  `json:"unknownFiles"`  // agent 目录中非 skill 的文件
+	TotalLinks    int            `json:"totalLinks"`
+	HealthyLinks  int            `json:"healthyLinks"`
+}
+
+// BrokenLink 断裂的软链接
+type BrokenLink struct {
+	AgentName string `json:"agentName"`
+	SkillName string `json:"skillName"`
+	LinkPath  string `json:"linkPath"`
+	Target    string `json:"target"`
+	Error     string `json:"error"`
+}
+
+// UnknownFile agent 目录中的非 skill 文件
+type UnknownFile struct {
+	AgentName string `json:"agentName"`
+	FileName  string `json:"fileName"`
+	FilePath  string `json:"filePath"`
+}
+
+// HealthCheck 执行 Agent 链接健康检查
+func (ss *SkillsService) HealthCheck() (*HealthCheckResult, error) {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get home directory: %v", err)
+	}
+
+	centralSkillsDir := filepath.Join(homeDir, ".agents", "skills")
+	result := &HealthCheckResult{}
+
+	// 跟踪所有 skill 被链接到了哪些 agent
+	skillLinkCount := make(map[string]int)
+
+	for _, agent := range getAllAgentConfigs() {
+		agentSkillsDir := filepath.Join(homeDir, agent.GlobalPath)
+		if agentSkillsDir == centralSkillsDir {
+			continue
+		}
+
+		if _, err := os.Stat(agentSkillsDir); os.IsNotExist(err) {
+			continue
+		}
+
+		entries, err := os.ReadDir(agentSkillsDir)
+		if err != nil {
+			continue
+		}
+
+		for _, entry := range entries {
+			name := entry.Name()
+			if strings.HasPrefix(name, ".") {
+				continue
+			}
+			fullPath := filepath.Join(agentSkillsDir, name)
+
+			// 检查是否是软链接
+			lstat, err := os.Lstat(fullPath)
+			if err != nil {
+				continue
+			}
+
+			if lstat.Mode()&os.ModeSymlink != 0 {
+				result.TotalLinks++
+				// 检查软链接是否有效
+				target, err := os.Readlink(fullPath)
+				if err != nil {
+					result.BrokenLinks = append(result.BrokenLinks, BrokenLink{
+						AgentName: agent.Name,
+						SkillName: name,
+						LinkPath:  fullPath,
+						Error:     fmt.Sprintf("cannot read link: %v", err),
+					})
+					continue
+				}
+
+				absTarget := target
+				if !filepath.IsAbs(target) {
+					absTarget = filepath.Clean(filepath.Join(agentSkillsDir, target))
+				}
+
+				if _, err := os.Stat(absTarget); os.IsNotExist(err) {
+					result.BrokenLinks = append(result.BrokenLinks, BrokenLink{
+						AgentName: agent.Name,
+						SkillName: name,
+						LinkPath:  fullPath,
+						Target:    absTarget,
+						Error:     "target does not exist",
+					})
+				} else {
+					result.HealthyLinks++
+					skillLinkCount[name]++
+				}
+			} else if !lstat.IsDir() {
+				// 非目录、非软链接的文件
+				result.UnknownFiles = append(result.UnknownFiles, UnknownFile{
+					AgentName: agent.Name,
+					FileName:  name,
+					FilePath:  fullPath,
+				})
+			}
+		}
+	}
+
+	// 检查中央目录中没有被任何 agent 链接的 skills
+	if entries, err := os.ReadDir(centralSkillsDir); err == nil {
+		for _, entry := range entries {
+			name := entry.Name()
+			if strings.HasPrefix(name, ".") || !entry.IsDir() {
+				continue
+			}
+			if skillLinkCount[name] == 0 {
+				result.OrphanSkills = append(result.OrphanSkills, name)
+			}
+		}
+	}
+
+	return result, nil
+}
+
+// RepairBrokenLinks 修复断裂的软链接（删除断裂链接）
+func (ss *SkillsService) RepairBrokenLinks() (int, error) {
+	result, err := ss.HealthCheck()
+	if err != nil {
+		return 0, err
+	}
+
+	repaired := 0
+	for _, broken := range result.BrokenLinks {
+		if err := os.Remove(broken.LinkPath); err == nil {
+			repaired++
+		}
+	}
+
+	return repaired, nil
+}
+
+// ---- 使用统计 ----
+
+// SkillStats 单个 skill 的统计信息
+type SkillStats struct {
+	Name        string `json:"name"`
+	AgentCount  int    `json:"agentCount"`
+	ProjectCount int   `json:"projectCount"`
+	Source      string `json:"source"`
+	InstalledAt string `json:"installedAt"`
+}
+
+// DashboardStats 首页仪表盘统计
+type DashboardStats struct {
+	TotalSkills       int              `json:"totalSkills"`
+	TotalAgents       int              `json:"totalAgents"`
+	TotalLinks        int              `json:"totalLinks"`
+	TotalProjects     int              `json:"totalProjects"`
+	OrphanSkills      int              `json:"orphanSkills"`
+	MostLinkedSkills  []SkillStats     `json:"mostLinkedSkills"`
+	RecentSkills      []SkillStats     `json:"recentSkills"`
+	TopAgents         []AgentLinkCount `json:"topAgents"`
+	TagDistribution   map[string]int   `json:"tagDistribution"`
+}
+
+// AgentLinkCount agent 链接计数
+type AgentLinkCount struct {
+	Name  string `json:"name"`
+	Count int    `json:"count"`
+}
+
+// GetDashboardStats 获取首页仪表盘统计数据
+func (ss *SkillsService) GetDashboardStats() (*DashboardStats, error) {
+	skills, err := ss.GetAllAgentSkills()
+	if err != nil {
+		return nil, err
+	}
+
+	stats := &DashboardStats{
+		TotalSkills: len(skills),
+		TotalAgents: len(getAllAgentConfigs()),
+	}
+
+	// 统计链接数和 agent 排名
+	agentCounts := make(map[string]int)
+	for _, skill := range skills {
+		stats.TotalLinks += len(skill.Agents)
+		for _, agent := range skill.Agents {
+			agentCounts[agent]++
+		}
+	}
+
+	// Top agents
+	for name, count := range agentCounts {
+		stats.TopAgents = append(stats.TopAgents, AgentLinkCount{Name: name, Count: count})
+	}
+	// 排序
+	for i := 0; i < len(stats.TopAgents); i++ {
+		for j := i + 1; j < len(stats.TopAgents); j++ {
+			if stats.TopAgents[j].Count > stats.TopAgents[i].Count {
+				stats.TopAgents[i], stats.TopAgents[j] = stats.TopAgents[j], stats.TopAgents[i]
+			}
+		}
+	}
+	if len(stats.TopAgents) > 5 {
+		stats.TopAgents = stats.TopAgents[:5]
+	}
+
+	// Most linked skills
+	for _, skill := range skills {
+		stats.MostLinkedSkills = append(stats.MostLinkedSkills, SkillStats{
+			Name:       skill.Name,
+			AgentCount: len(skill.Agents),
+			Source:     skill.Source,
+		})
+	}
+	for i := 0; i < len(stats.MostLinkedSkills); i++ {
+		for j := i + 1; j < len(stats.MostLinkedSkills); j++ {
+			if stats.MostLinkedSkills[j].AgentCount > stats.MostLinkedSkills[i].AgentCount {
+				stats.MostLinkedSkills[i], stats.MostLinkedSkills[j] = stats.MostLinkedSkills[j], stats.MostLinkedSkills[i]
+			}
+		}
+	}
+	if len(stats.MostLinkedSkills) > 5 {
+		stats.MostLinkedSkills = stats.MostLinkedSkills[:5]
+	}
+
+	// Recent skills (from .skills-lock)
+	homeDir, _ := os.UserHomeDir()
+	lockPath := filepath.Join(homeDir, ".agents", "skills", ".skills-lock")
+	if data, err := os.ReadFile(lockPath); err == nil {
+		if lock, err := unmarshalSkillsLock(data); err == nil {
+			type timeEntry struct {
+				name string
+				time string
+				src  string
+			}
+			var entries []timeEntry
+			for name, entry := range lock.Skills {
+				t := entry.UpdatedAt
+				if t == "" {
+					t = entry.InstalledAt
+				}
+				entries = append(entries, timeEntry{name: name, time: t, src: entry.Source})
+			}
+			// 按时间降序
+			for i := 0; i < len(entries); i++ {
+				for j := i + 1; j < len(entries); j++ {
+					if entries[j].time > entries[i].time {
+						entries[i], entries[j] = entries[j], entries[i]
+					}
+				}
+			}
+			if len(entries) > 5 {
+				entries = entries[:5]
+			}
+			for _, e := range entries {
+				stats.RecentSkills = append(stats.RecentSkills, SkillStats{
+					Name:        e.name,
+					Source:      e.src,
+					InstalledAt: e.time,
+				})
+			}
+		}
+	}
+
+	// Orphan skills count
+	healthResult, _ := ss.HealthCheck()
+	if healthResult != nil {
+		stats.OrphanSkills = len(healthResult.OrphanSkills)
+	}
+
+	// Tag distribution
+	tagConfig, _ := loadSkillTags()
+	tagDist := make(map[string]int)
+	for _, tags := range tagConfig.Tags {
+		for _, tag := range tags {
+			tagDist[tag]++
+		}
+	}
+	stats.TagDistribution = tagDist
+
+	return stats, nil
+}
+
+// ---- Skill 模板/创建 ----
+
+// SkillTemplate skill 模板定义
+type SkillTemplate struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Language    string `json:"language"`
+	Framework   string `json:"framework"`
+	Content     string `json:"content"`
+}
+
+// GetSkillTemplates 获取内置模板列表
+func (ss *SkillsService) GetSkillTemplates() []SkillTemplate {
+	return []SkillTemplate{
+		{
+			Name:        "blank",
+			Description: "Empty skill template",
+			Content: `---
+name: {{NAME}}
+description: {{DESCRIPTION}}
+---
+
+# {{NAME}}
+
+Add your skill instructions here.
+`,
+		},
+		{
+			Name:        "react",
+			Description: "React best practices template",
+			Language:    "TypeScript",
+			Framework:   "React",
+			Content: `---
+name: {{NAME}}
+description: {{DESCRIPTION}}
+language: TypeScript
+framework: React
+---
+
+# {{NAME}}
+
+## React Component Guidelines
+
+- Use functional components with hooks
+- Prefer composition over inheritance
+- Use TypeScript for type safety
+- Follow the single responsibility principle
+
+## Hooks Best Practices
+
+- Keep hooks at the top level
+- Use custom hooks for shared logic
+- Avoid unnecessary re-renders with useMemo/useCallback
+
+## State Management
+
+- Use useState for local state
+- Use useContext for shared state
+- Consider external state management for complex apps
+`,
+		},
+		{
+			Name:        "python",
+			Description: "Python development template",
+			Language:    "Python",
+			Content: `---
+name: {{NAME}}
+description: {{DESCRIPTION}}
+language: Python
+---
+
+# {{NAME}}
+
+## Python Coding Standards
+
+- Follow PEP 8 style guide
+- Use type hints for function signatures
+- Write docstrings for all public functions
+- Use virtual environments for dependency management
+
+## Error Handling
+
+- Use specific exception types
+- Avoid bare except clauses
+- Log errors with appropriate severity levels
+
+## Testing
+
+- Write unit tests with pytest
+- Aim for high code coverage
+- Use fixtures for test setup
+`,
+		},
+		{
+			Name:        "vue",
+			Description: "Vue.js development template",
+			Language:    "TypeScript",
+			Framework:   "Vue",
+			Content: `---
+name: {{NAME}}
+description: {{DESCRIPTION}}
+language: TypeScript
+framework: Vue
+---
+
+# {{NAME}}
+
+## Vue 3 Guidelines
+
+- Use Composition API with script setup
+- Prefer ref/reactive for state management
+- Use defineProps/defineEmits for component communication
+
+## Component Design
+
+- Keep components small and focused
+- Use slots for flexible layouts
+- Leverage provide/inject for deep prop passing
+`,
+		},
+	}
+}
+
+// CreateSkill 创建新的自定义 skill
+func (ss *SkillsService) CreateSkill(name string, description string, templateName string, agents []string) error {
+	if name == "" {
+		return fmt.Errorf("skill name is required")
+	}
+
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("failed to get home directory: %v", err)
+	}
+
+	centralSkillsDir := filepath.Join(homeDir, ".agents", "skills")
+	skillPath := filepath.Join(centralSkillsDir, name)
+
+	// 检查是否已存在
+	if _, err := os.Stat(skillPath); err == nil {
+		return fmt.Errorf("skill already exists: %s", name)
+	}
+
+	// 获取模板
+	var content string
+	templates := ss.GetSkillTemplates()
+	for _, tmpl := range templates {
+		if tmpl.Name == templateName {
+			content = tmpl.Content
+			break
+		}
+	}
+	if content == "" {
+		// 使用空白模板
+		content = templates[0].Content
+	}
+
+	// 替换占位符
+	content = strings.ReplaceAll(content, "{{NAME}}", name)
+	content = strings.ReplaceAll(content, "{{DESCRIPTION}}", description)
+
+	// 创建目录
+	if err := os.MkdirAll(skillPath, 0755); err != nil {
+		return fmt.Errorf("failed to create skill directory: %v", err)
+	}
+
+	// 写入 SKILL.md
+	skillMdPath := filepath.Join(skillPath, "SKILL.md")
+	if err := os.WriteFile(skillMdPath, []byte(content), 0644); err != nil {
+		os.RemoveAll(skillPath)
+		return fmt.Errorf("failed to write SKILL.md: %v", err)
+	}
+
+	// 更新 .skills-lock
+	now := time.Now().Format(time.RFC3339)
+	lockPath := filepath.Join(centralSkillsDir, ".skills-lock")
+	var lock SkillsLock
+	if data, err := os.ReadFile(lockPath); err == nil {
+		lock, _ = unmarshalSkillsLock(data)
+	} else {
+		lock = SkillsLock{Version: 3, Skills: make(map[string]SkillLockEntry)}
+	}
+	lock.Skills[name] = SkillLockEntry{
+		Source:      "local",
+		SourceType:  "local",
+		InstalledAt: now,
+		UpdatedAt:   now,
+	}
+	if data, err := json.MarshalIndent(lock, "", "  "); err == nil {
+		os.WriteFile(lockPath, data, 0644)
+	}
+
+	// 创建 agent 软链接
+	if len(agents) > 0 {
+		ss.createSymlinksForSkill(name, skillPath, agents)
+	}
+
+	return nil
+}
+
+// SaveSkillContent 保存 skill 的 SKILL.md 内容
+func (ss *SkillsService) SaveSkillContent(skillName string, content string) error {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("failed to get home directory: %v", err)
+	}
+
+	skillMdPath := filepath.Join(homeDir, ".agents", "skills", skillName, "SKILL.md")
+	if _, err := os.Stat(skillMdPath); os.IsNotExist(err) {
+		return fmt.Errorf("skill not found: %s", skillName)
+	}
+
+	return os.WriteFile(skillMdPath, []byte(content), 0644)
+}
+
+// EditorInfo 编辑器信息
+type EditorInfo struct {
+	ID         string `json:"id"`
+	Name       string `json:"name"`
+	Icon       string `json:"icon"`
+	IconBase64 string `json:"iconBase64"` // base64 编码的 PNG 图标
+}
+
+// editorDef 编辑器定义（内部使用）
+type editorDef struct {
+	ID      string
+	Name    string
+	Icon    string
+	AppName string // macOS .app 名称
+}
+
+// knownEditorDefs 已知的代码编辑器列表（按优先级排列）
+var knownEditorDefs = []editorDef{
+	{ID: "code", Name: "VS Code", Icon: "vscode", AppName: "Visual Studio Code"},
+	{ID: "cursor", Name: "Cursor", Icon: "cursor", AppName: "Cursor"},
+	{ID: "buddycn", Name: "CodeBuddy", Icon: "codebuddy", AppName: "CodeBuddy CN"},
+	{ID: "windsurf", Name: "Windsurf", Icon: "windsurf", AppName: "Windsurf"},
+	{ID: "zed", Name: "Zed", Icon: "zed", AppName: "Zed"},
+	{ID: "subl", Name: "Sublime Text", Icon: "sublime", AppName: "Sublime Text"},
+	{ID: "idea", Name: "IntelliJ IDEA", Icon: "idea", AppName: "IntelliJ IDEA"},
+	{ID: "webstorm", Name: "WebStorm", Icon: "webstorm", AppName: "WebStorm"},
+	{ID: "fleet", Name: "Fleet", Icon: "fleet", AppName: "Fleet"},
+	{ID: "nova", Name: "Nova", Icon: "nova", AppName: "Nova"},
+}
+
+// getAppIconBase64 从 macOS .app 包中提取应用图标并转为 base64 PNG
+func getAppIconBase64(appName string) string {
+	appPath := fmt.Sprintf("/Applications/%s.app", appName)
+	if _, err := os.Stat(appPath); os.IsNotExist(err) {
+		return ""
+	}
+
+	// 读取 Info.plist 获取图标文件名
+	iconFileOut, err := exec.Command("defaults", "read", appPath+"/Contents/Info", "CFBundleIconFile").Output()
+	if err != nil {
+		return ""
+	}
+	iconFile := strings.TrimSpace(string(iconFileOut))
+	if iconFile == "" {
+		return ""
+	}
+	// 补全 .icns 后缀
+	if !strings.HasSuffix(iconFile, ".icns") {
+		iconFile += ".icns"
+	}
+
+	icnsPath := filepath.Join(appPath, "Contents", "Resources", iconFile)
+	if _, err := os.Stat(icnsPath); os.IsNotExist(err) {
+		return ""
+	}
+
+	// 用 sips 将 icns 转换为 32x32 PNG
+	tmpFile := filepath.Join(os.TempDir(), fmt.Sprintf("editor-icon-%s.png", appName))
+	defer os.Remove(tmpFile)
+
+	if err := exec.Command("sips", "-s", "format", "png", "-Z", "32", icnsPath, "--out", tmpFile).Run(); err != nil {
+		return ""
+	}
+
+	// 读取 PNG 并转为 base64
+	data, err := os.ReadFile(tmpFile)
+	if err != nil {
+		return ""
+	}
+
+	return "data:image/png;base64," + base64.StdEncoding.EncodeToString(data)
+}
+
+// GetAvailableEditors 返回系统中可用的编辑器列表（包含应用图标）
+func (ss *SkillsService) GetAvailableEditors() []EditorInfo {
+	var available []EditorInfo
+	for _, def := range knownEditorDefs {
+		if _, err := exec.LookPath(def.ID); err == nil {
+			editor := EditorInfo{
+				ID:         def.ID,
+				Name:       def.Name,
+				Icon:       def.Icon,
+				IconBase64: getAppIconBase64(def.AppName),
+			}
+			available = append(available, editor)
+		}
+	}
+	return available
+}
+
+// editorOpenArgs 不同编辑器打开目录时需要的额外参数
+var editorOpenArgs = map[string][]string{
+	"code":     {"-n"},  // VS Code: --new-window
+	"cursor":   {"-n"},  // Cursor: --new-window
+	"buddycn":  {"-n"},  // CodeBuddy: --new-window
+	"windsurf": {"-n"},  // Windsurf: --new-window
+}
+
+// OpenSkillInEditor 在指定编辑器中打开 skill 目录
+func (ss *SkillsService) OpenSkillInEditor(skillName string, editorID string) error {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("failed to get home directory: %v", err)
+	}
+
+	skillDir := filepath.Join(homeDir, ".agents", "skills", skillName)
+	if _, err := os.Stat(skillDir); os.IsNotExist(err) {
+		return fmt.Errorf("skill not found: %s", skillName)
+	}
+
+	// 构建命令参数
+	extraArgs := ""
+	if args, ok := editorOpenArgs[editorID]; ok {
+		extraArgs = strings.Join(args, " ") + " "
+	}
+
+	// 通过 login shell 执行，确保 GUI 应用能找到正确的 CLI 工具路径
+	cmd := fmt.Sprintf("%s %s'%s'", editorID, extraArgs, skillDir)
+	_, err = shellRun(cmd)
+	return err
+}
+
+// OpenSkillInSystemEditor 在系统编辑器中打开 skill 目录（兼容旧调用，自动选择第一个可用编辑器）
+func (ss *SkillsService) OpenSkillInSystemEditor(skillName string) error {
+	editors := ss.GetAvailableEditors()
+	if len(editors) == 0 {
+		return fmt.Errorf("no editor found")
+	}
+	return ss.OpenSkillInEditor(skillName, editors[0].ID)
+}
+
+// GetSkillFiles 获取 skill 目录下的所有文件列表
+func (ss *SkillsService) GetSkillFiles(skillName string) ([]SkillFile, error) {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get home directory: %v", err)
+	}
+
+	skillDir := filepath.Join(homeDir, ".agents", "skills", skillName)
+	if _, err := os.Stat(skillDir); os.IsNotExist(err) {
+		return nil, fmt.Errorf("skill not found: %s", skillName)
+	}
+
+	var files []SkillFile
+	err = filepath.Walk(skillDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		relPath, _ := filepath.Rel(skillDir, path)
+		if relPath == "." {
+			return nil
+		}
+		files = append(files, SkillFile{
+			Name:  relPath,
+			IsDir: info.IsDir(),
+			Size:  info.Size(),
+		})
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list files: %v", err)
+	}
+
+	return files, nil
+}
+
+// SkillFile 技能目录中的文件信息
+type SkillFile struct {
+	Name  string `json:"name"`
+	IsDir bool   `json:"isDir"`
+	Size  int64  `json:"size"`
+}
+
+// ---- Diff 预览 ----
+
+// SkillDiff 更新前后的 diff 信息
+type SkillDiff struct {
+	SkillName    string `json:"skillName"`
+	LocalContent string `json:"localContent"`
+	RemoteContent string `json:"remoteContent"`
+	HasChanges   bool   `json:"hasChanges"`
+}
+
+// GetSkillDiff 获取本地和远程版本的 SKILL.md 内容对比
+func (ss *SkillsService) GetSkillDiff(skillName string) (*SkillDiff, error) {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get home directory: %v", err)
+	}
+
+	centralSkillsDir := filepath.Join(homeDir, ".agents", "skills")
+	lockPath := filepath.Join(centralSkillsDir, ".skills-lock")
+
+	// 读取本地内容
+	localPath := filepath.Join(centralSkillsDir, skillName, "SKILL.md")
+	localData, err := os.ReadFile(localPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read local SKILL.md: %v", err)
+	}
+
+	// 获取来源信息
+	lockData, err := os.ReadFile(lockPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read .skills-lock: %v", err)
+	}
+	lock, err := unmarshalSkillsLock(lockData)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse .skills-lock: %v", err)
+	}
+	entry, exists := lock.Skills[skillName]
+	if !exists || entry.Source == "" || entry.Source == "local" {
+		return &SkillDiff{
+			SkillName:    skillName,
+			LocalContent: string(localData),
+			HasChanges:   false,
+		}, nil
+	}
+
+	// 克隆远程仓库获取最新内容
+	repoURL := fmt.Sprintf("https://github.com/%s.git", entry.Source)
+	tempRepoDir := filepath.Join(os.TempDir(), "skills-diff-"+skillName)
+	os.RemoveAll(tempRepoDir)
+	defer os.RemoveAll(tempRepoDir)
+
+	cloneOutput, err := shellRun(fmt.Sprintf("git clone --depth 1 '%s' '%s'", repoURL, tempRepoDir))
+	if err != nil {
+		return nil, fmt.Errorf("failed to clone: %v\n%s", err, string(cloneOutput))
+	}
+
+	// 查找远程 skill
+	skillSourcePath := findSkillInRepo(tempRepoDir, skillName)
+	if skillSourcePath == "" {
+		return nil, fmt.Errorf("skill not found in remote repository")
+	}
+
+	remoteSkillMd := filepath.Join(skillSourcePath, "SKILL.md")
+	remoteData, err := os.ReadFile(remoteSkillMd)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read remote SKILL.md: %v", err)
+	}
+
+	return &SkillDiff{
+		SkillName:     skillName,
+		LocalContent:  string(localData),
+		RemoteContent: string(remoteData),
+		HasChanges:    string(localData) != string(remoteData),
+	}, nil
+}
+
+// ---- 私有源管理 ----
+
+// CustomSource 自定义 skill 源
+type CustomSource struct {
+	Name    string `json:"name"`
+	URL     string `json:"url"`     // Git 仓库 URL
+	Token   string `json:"token"`   // 可选的 PAT token
+	AddedAt string `json:"addedAt"`
+}
+
+// CustomSourcesConfig 自定义源配置
+type CustomSourcesConfig struct {
+	Sources []CustomSource `json:"sources"`
+}
+
+func getSourcesFilePath() (string, error) {
+	configDir, err := getConfigDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(configDir, "custom-sources.json"), nil
+}
+
+func loadCustomSources() ([]CustomSource, error) {
+	filePath, err := getSourcesFilePath()
+	if err != nil {
+		return nil, err
+	}
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return []CustomSource{}, nil
+		}
+		return nil, err
+	}
+	var config CustomSourcesConfig
+	if err := json.Unmarshal(data, &config); err != nil {
+		return []CustomSource{}, nil
+	}
+	return config.Sources, nil
+}
+
+func saveCustomSources(sources []CustomSource) error {
+	filePath, err := getSourcesFilePath()
+	if err != nil {
+		return err
+	}
+	config := CustomSourcesConfig{Sources: sources}
+	data, err := json.MarshalIndent(config, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(filePath, data, 0644)
+}
+
+// GetCustomSources 获取自定义源列表
+func (ss *SkillsService) GetCustomSources() ([]CustomSource, error) {
+	return loadCustomSources()
+}
+
+// AddCustomSource 添加自定义源
+func (ss *SkillsService) AddCustomSource(name string, url string, token string) error {
+	if name == "" || url == "" {
+		return fmt.Errorf("name and URL are required")
+	}
+
+	sources, err := loadCustomSources()
+	if err != nil {
+		return err
+	}
+
+	// 检查重复
+	for _, s := range sources {
+		if s.Name == name {
+			return fmt.Errorf("source already exists: %s", name)
+		}
+	}
+
+	sources = append(sources, CustomSource{
+		Name:    name,
+		URL:     url,
+		Token:   token,
+		AddedAt: time.Now().Format(time.RFC3339),
+	})
+
+	return saveCustomSources(sources)
+}
+
+// RemoveCustomSource 删除自定义源
+func (ss *SkillsService) RemoveCustomSource(name string) error {
+	sources, err := loadCustomSources()
+	if err != nil {
+		return err
+	}
+
+	found := false
+	result := make([]CustomSource, 0, len(sources))
+	for _, s := range sources {
+		if s.Name == name {
+			found = true
+			continue
+		}
+		result = append(result, s)
+	}
+
+	if !found {
+		return fmt.Errorf("source not found: %s", name)
+	}
+
+	return saveCustomSources(result)
+}
+
+// SearchCustomSource 从自定义源搜索 skills
+func (ss *SkillsService) SearchCustomSource(sourceName string) ([]RemoteSkill, error) {
+	sources, err := loadCustomSources()
+	if err != nil {
+		return nil, err
+	}
+
+	var source *CustomSource
+	for _, s := range sources {
+		if s.Name == sourceName {
+			source = &s
+			break
+		}
+	}
+	if source == nil {
+		return nil, fmt.Errorf("source not found: %s", sourceName)
+	}
+
+	// 克隆仓库
+	tempDir := filepath.Join(os.TempDir(), "skills-source-"+sourceName)
+	os.RemoveAll(tempDir)
+	defer os.RemoveAll(tempDir)
+
+	cloneCmd := fmt.Sprintf("git clone --depth 1 '%s' '%s'", source.URL, tempDir)
+	if _, err := shellRun(cloneCmd); err != nil {
+		return nil, fmt.Errorf("failed to clone source: %v", err)
+	}
+
+	// 扫描仓库中的 skills
+	var skills []RemoteSkill
+	skillsDir := filepath.Join(tempDir, "skills")
+	if entries, err := os.ReadDir(skillsDir); err == nil {
+		for _, entry := range entries {
+			if !entry.IsDir() || strings.HasPrefix(entry.Name(), ".") {
+				continue
+			}
+			skillPath := filepath.Join(skillsDir, entry.Name())
+			if hasSkillMd(skillPath) {
+				content, _ := os.ReadFile(filepath.Join(skillPath, "SKILL.md"))
+				parsed := parseSkillMd(string(content), skillPath)
+				skills = append(skills, RemoteSkill{
+					FullName:    fmt.Sprintf("%s@%s", sourceName, entry.Name()),
+					Name:        entry.Name(),
+					Description: parsed.Desc,
+				})
+			}
+		}
+	}
+
+	// 如果 skills/ 目录不存在，检查根目录
+	if len(skills) == 0 {
+		if hasSkillMd(tempDir) {
+			content, _ := os.ReadFile(filepath.Join(tempDir, "SKILL.md"))
+			parsed := parseSkillMd(string(content), tempDir)
+			repoName := filepath.Base(tempDir)
+			skills = append(skills, RemoteSkill{
+				FullName:    fmt.Sprintf("%s@%s", sourceName, repoName),
+				Name:        repoName,
+				Description: parsed.Desc,
+			})
+		}
+	}
+
+	return skills, nil
+}
+
+// ---- 项目初始化向导 ----
+
+// ProjectTypeInfo 项目类型检测结果
+type ProjectTypeInfo struct {
+	ProjectPath    string   `json:"projectPath"`
+	DetectedTypes  []string `json:"detectedTypes"`  // e.g. ["react", "typescript", "tailwind"]
+	SuggestedSkills []string `json:"suggestedSkills"` // 推荐安装的 skill 关键词
+	ExistingAgents []string `json:"existingAgents"`
+}
+
+// DetectProjectType 检测项目类型
+func (ss *SkillsService) DetectProjectType(projectPath string) (*ProjectTypeInfo, error) {
+	if projectPath == "" {
+		return nil, fmt.Errorf("project path is required")
+	}
+
+	info := &ProjectTypeInfo{
+		ProjectPath: projectPath,
+	}
+
+	// 检测 package.json
+	pkgPath := filepath.Join(projectPath, "package.json")
+	if data, err := os.ReadFile(pkgPath); err == nil {
+		var pkg map[string]interface{}
+		if err := json.Unmarshal(data, &pkg); err == nil {
+			deps := make(map[string]bool)
+			for _, key := range []string{"dependencies", "devDependencies"} {
+				if d, ok := pkg[key].(map[string]interface{}); ok {
+					for k := range d {
+						deps[k] = true
+					}
+				}
+			}
+			if deps["react"] || deps["react-dom"] {
+				info.DetectedTypes = append(info.DetectedTypes, "React")
+				info.SuggestedSkills = append(info.SuggestedSkills, "react")
+			}
+			if deps["vue"] {
+				info.DetectedTypes = append(info.DetectedTypes, "Vue")
+				info.SuggestedSkills = append(info.SuggestedSkills, "vue")
+			}
+			if deps["next"] {
+				info.DetectedTypes = append(info.DetectedTypes, "Next.js")
+				info.SuggestedSkills = append(info.SuggestedSkills, "nextjs")
+			}
+			if deps["typescript"] {
+				info.DetectedTypes = append(info.DetectedTypes, "TypeScript")
+				info.SuggestedSkills = append(info.SuggestedSkills, "typescript")
+			}
+			if deps["tailwindcss"] {
+				info.DetectedTypes = append(info.DetectedTypes, "Tailwind CSS")
+			}
+			if deps["svelte"] {
+				info.DetectedTypes = append(info.DetectedTypes, "Svelte")
+				info.SuggestedSkills = append(info.SuggestedSkills, "svelte")
+			}
+		}
+	}
+
+	// 检测 Go
+	if _, err := os.Stat(filepath.Join(projectPath, "go.mod")); err == nil {
+		info.DetectedTypes = append(info.DetectedTypes, "Go")
+		info.SuggestedSkills = append(info.SuggestedSkills, "go")
+	}
+
+	// 检测 Python
+	if _, err := os.Stat(filepath.Join(projectPath, "requirements.txt")); err == nil {
+		info.DetectedTypes = append(info.DetectedTypes, "Python")
+		info.SuggestedSkills = append(info.SuggestedSkills, "python")
+	}
+	if _, err := os.Stat(filepath.Join(projectPath, "pyproject.toml")); err == nil {
+		if !contains(info.DetectedTypes, "Python") {
+			info.DetectedTypes = append(info.DetectedTypes, "Python")
+			info.SuggestedSkills = append(info.SuggestedSkills, "python")
+		}
+	}
+
+	// 检测 Rust
+	if _, err := os.Stat(filepath.Join(projectPath, "Cargo.toml")); err == nil {
+		info.DetectedTypes = append(info.DetectedTypes, "Rust")
+		info.SuggestedSkills = append(info.SuggestedSkills, "rust")
+	}
+
+	// 如果没有检测到任何类型
+	if len(info.DetectedTypes) == 0 {
+		info.DetectedTypes = append(info.DetectedTypes, "Unknown")
+	}
+
+	// 检测已有的 agent
+	for _, agent := range getAllAgentConfigs() {
+		agentDir := filepath.Join(projectPath, agent.LocalPath)
+		if dirInfo, err := os.Stat(agentDir); err == nil && dirInfo.IsDir() {
+			info.ExistingAgents = append(info.ExistingAgents, agent.Name)
+		}
+	}
+
+	return info, nil
+}
+
+func contains(slice []string, item string) bool {
+	for _, s := range slice {
+		if s == item {
+			return true
+		}
+	}
+	return false
 }
 
 // updateSkillsLock 更新 .skills-lock 文件
@@ -1627,4 +2989,627 @@ func (ss *SkillsService) updateSkillsLock(skillsDir, skillName, source string) e
 	}
 
 	return os.WriteFile(lockPath, data, 0644)
+}
+
+// RecommendedSkill 推荐技能
+type RecommendedSkill struct {
+	Name   string `json:"name"`
+	Reason string `json:"reason"`
+}
+
+// GetRecommendations 根据已安装的技能推荐相关技能
+func (ss *SkillsService) GetRecommendations() ([]RecommendedSkill, error) {
+	skills, err := ss.GetAllAgentSkills()
+	if err != nil {
+		return nil, err
+	}
+
+	// 收集已安装的 skill 名称和标签
+	installedNames := map[string]bool{}
+	tagCounts := map[string]int{}
+	for _, s := range skills {
+		installedNames[s.Name] = true
+		tags, _ := ss.GetSkillTags(s.Name)
+		for _, t := range tags {
+			tagCounts[t]++
+		}
+	}
+
+	// 基于最常用的标签，搜索远程技能
+	recommendations := []RecommendedSkill{}
+	searchTerms := []string{}
+
+	// 从标签中提取搜索词
+	for tag, count := range tagCounts {
+		if count >= 1 {
+			searchTerms = append(searchTerms, tag)
+		}
+	}
+
+	// 也从已安装技能的 framework/language 提取
+	for _, s := range skills {
+		if s.Language != "" && len(searchTerms) < 5 {
+			searchTerms = append(searchTerms, s.Language)
+		}
+		if s.Framework != "" && len(searchTerms) < 5 {
+			searchTerms = append(searchTerms, s.Framework)
+		}
+	}
+
+	seen := map[string]bool{}
+	for _, term := range searchTerms {
+		if len(recommendations) >= 5 {
+			break
+		}
+		remoteSkills, err := ss.FindRemoteSkills(term)
+		if err != nil {
+			continue
+		}
+		for _, rs := range remoteSkills {
+			if installedNames[rs.Name] || seen[rs.FullName] {
+				continue
+			}
+			seen[rs.FullName] = true
+			recommendations = append(recommendations, RecommendedSkill{
+				Name:   rs.FullName,
+				Reason: fmt.Sprintf("Based on: %s", term),
+			})
+			if len(recommendations) >= 5 {
+				break
+			}
+		}
+	}
+
+	return recommendations, nil
+}
+
+// AutoUpdateConfig 自动更新配置
+type AutoUpdateConfig struct {
+	Enabled       bool   `json:"enabled"`
+	IntervalHours int    `json:"intervalHours"`
+	LastCheck     string `json:"lastCheck"`
+}
+
+// GetAutoUpdateConfig 获取自动更新配置
+func (ss *SkillsService) GetAutoUpdateConfig() (*AutoUpdateConfig, error) {
+	configDir, err := getConfigDir()
+	if err != nil {
+		return &AutoUpdateConfig{Enabled: false, IntervalHours: 24}, nil
+	}
+	configPath := filepath.Join(configDir, "auto-update.json")
+
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		return &AutoUpdateConfig{Enabled: false, IntervalHours: 24}, nil
+	}
+
+	var config AutoUpdateConfig
+	if err := json.Unmarshal(data, &config); err != nil {
+		return &AutoUpdateConfig{Enabled: false, IntervalHours: 24}, nil
+	}
+	return &config, nil
+}
+
+// SetAutoUpdateConfig 设置自动更新配置
+func (ss *SkillsService) SetAutoUpdateConfig(enabled bool, intervalHours int) error {
+	configDir, err := getConfigDir()
+	if err != nil {
+		return err
+	}
+	os.MkdirAll(configDir, 0755)
+	configPath := filepath.Join(configDir, "auto-update.json")
+
+	config := AutoUpdateConfig{
+		Enabled:       enabled,
+		IntervalHours: intervalHours,
+		LastCheck:     time.Now().Format(time.RFC3339),
+	}
+
+	data, err := json.MarshalIndent(config, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(configPath, data, 0644)
+}
+
+// ---- 收藏/置顶 ----
+
+// FavoritesConfig 收藏配置
+type FavoritesConfig struct {
+	Favorites []string `json:"favorites"` // 收藏的 skill 名称列表
+}
+
+func getFavoritesFilePath() (string, error) {
+	configDir, err := getConfigDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(configDir, "favorites.json"), nil
+}
+
+func loadFavorites() (FavoritesConfig, error) {
+	filePath, err := getFavoritesFilePath()
+	if err != nil {
+		return FavoritesConfig{}, err
+	}
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return FavoritesConfig{}, nil
+	}
+	var config FavoritesConfig
+	if err := json.Unmarshal(data, &config); err != nil {
+		return FavoritesConfig{}, nil
+	}
+	return config, nil
+}
+
+func saveFavorites(config FavoritesConfig) error {
+	filePath, err := getFavoritesFilePath()
+	if err != nil {
+		return err
+	}
+	data, err := json.MarshalIndent(config, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(filePath, data, 0644)
+}
+
+// GetFavorites 获取收藏列表
+func (ss *SkillsService) GetFavorites() ([]string, error) {
+	config, err := loadFavorites()
+	if err != nil {
+		return []string{}, err
+	}
+	return config.Favorites, nil
+}
+
+// ToggleFavorite 切换收藏状态，返回新状态
+func (ss *SkillsService) ToggleFavorite(skillName string) (bool, error) {
+	config, err := loadFavorites()
+	if err != nil {
+		return false, err
+	}
+	found := false
+	result := make([]string, 0, len(config.Favorites))
+	for _, name := range config.Favorites {
+		if name == skillName {
+			found = true
+			continue
+		}
+		result = append(result, name)
+	}
+	if !found {
+		result = append([]string{skillName}, result...)
+	}
+	config.Favorites = result
+	if err := saveFavorites(config); err != nil {
+		return false, err
+	}
+	return !found, nil
+}
+
+// ---- 活动日志 ----
+
+// ActivityLog 活动日志条目
+type ActivityLog struct {
+	ID        string `json:"id"`
+	Action    string `json:"action"`    // install, delete, update, link, unlink, create, import, export, etc.
+	SkillName string `json:"skillName"` // 相关 skill
+	Detail    string `json:"detail"`    // 额外说明
+	Timestamp string `json:"timestamp"`
+}
+
+// ActivityLogsConfig 活动日志配置
+type ActivityLogsConfig struct {
+	Logs []ActivityLog `json:"logs"`
+}
+
+func getActivityLogFilePath() (string, error) {
+	configDir, err := getConfigDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(configDir, "activity-log.json"), nil
+}
+
+func loadActivityLogs() (ActivityLogsConfig, error) {
+	filePath, err := getActivityLogFilePath()
+	if err != nil {
+		return ActivityLogsConfig{}, err
+	}
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return ActivityLogsConfig{}, nil
+	}
+	var config ActivityLogsConfig
+	if err := json.Unmarshal(data, &config); err != nil {
+		return ActivityLogsConfig{}, nil
+	}
+	return config, nil
+}
+
+func saveActivityLogs(config ActivityLogsConfig) error {
+	filePath, err := getActivityLogFilePath()
+	if err != nil {
+		return err
+	}
+	// 只保留最近 200 条
+	if len(config.Logs) > 200 {
+		config.Logs = config.Logs[:200]
+	}
+	data, err := json.MarshalIndent(config, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(filePath, data, 0644)
+}
+
+// AddActivityLog 记录一条活动日志
+func (ss *SkillsService) AddActivityLog(action string, skillName string, detail string) error {
+	config, err := loadActivityLogs()
+	if err != nil {
+		return err
+	}
+	log := ActivityLog{
+		ID:        fmt.Sprintf("%d", time.Now().UnixNano()),
+		Action:    action,
+		SkillName: skillName,
+		Detail:    detail,
+		Timestamp: time.Now().Format(time.RFC3339),
+	}
+	config.Logs = append([]ActivityLog{log}, config.Logs...)
+	return saveActivityLogs(config)
+}
+
+// GetActivityLogs 获取活动日志
+func (ss *SkillsService) GetActivityLogs(limit int) ([]ActivityLog, error) {
+	config, err := loadActivityLogs()
+	if err != nil {
+		return []ActivityLog{}, err
+	}
+	if limit > 0 && limit < len(config.Logs) {
+		return config.Logs[:limit], nil
+	}
+	return config.Logs, nil
+}
+
+// ClearActivityLogs 清空活动日志
+func (ss *SkillsService) ClearActivityLogs() error {
+	return saveActivityLogs(ActivityLogsConfig{})
+}
+
+// ---- 技能预览（安装前预览） ----
+
+// PreviewRemoteSkill 预览远程 skill 的 SKILL.md 内容（不安装）
+func (ss *SkillsService) PreviewRemoteSkill(fullName string) (string, error) {
+	parts := strings.Split(fullName, "@")
+	if len(parts) != 2 {
+		return "", fmt.Errorf("invalid skill name format: %s", fullName)
+	}
+	ownerRepo := parts[0]
+	skillName := parts[1]
+
+	// 尝试从 GitHub raw 获取 SKILL.md（不需要完整 clone）
+	paths := []string{
+		fmt.Sprintf("https://raw.githubusercontent.com/%s/main/skills/%s/SKILL.md", ownerRepo, skillName),
+		fmt.Sprintf("https://raw.githubusercontent.com/%s/main/%s/SKILL.md", ownerRepo, skillName),
+		fmt.Sprintf("https://raw.githubusercontent.com/%s/main/SKILL.md", ownerRepo),
+	}
+
+	for _, url := range paths {
+		data, err := httpGet(url)
+		if err == nil && len(data) > 0 {
+			return string(data), nil
+		}
+	}
+
+	return "", fmt.Errorf("could not fetch SKILL.md for %s", fullName)
+}
+
+// ---- 技能集合 ----
+
+// SkillCollection 技能集合
+type SkillCollection struct {
+	Name        string   `json:"name"`
+	Description string   `json:"description"`
+	Skills      []string `json:"skills"` // fullName 列表 (owner/repo@name)
+	CreatedAt   string   `json:"createdAt"`
+}
+
+// CollectionsConfig 集合配置
+type CollectionsConfig struct {
+	Collections []SkillCollection `json:"collections"`
+}
+
+func getCollectionsFilePath() (string, error) {
+	configDir, err := getConfigDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(configDir, "collections.json"), nil
+}
+
+func loadCollections() (CollectionsConfig, error) {
+	filePath, err := getCollectionsFilePath()
+	if err != nil {
+		return CollectionsConfig{}, err
+	}
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return CollectionsConfig{}, nil
+	}
+	var config CollectionsConfig
+	if err := json.Unmarshal(data, &config); err != nil {
+		return CollectionsConfig{}, nil
+	}
+	return config, nil
+}
+
+func saveCollections(config CollectionsConfig) error {
+	filePath, err := getCollectionsFilePath()
+	if err != nil {
+		return err
+	}
+	data, err := json.MarshalIndent(config, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(filePath, data, 0644)
+}
+
+// GetCollections 获取所有集合
+func (ss *SkillsService) GetCollections() ([]SkillCollection, error) {
+	config, err := loadCollections()
+	if err != nil {
+		return []SkillCollection{}, err
+	}
+	return config.Collections, nil
+}
+
+// CreateCollection 创建新集合
+func (ss *SkillsService) CreateCollection(name string, description string, skills []string) error {
+	if name == "" {
+		return fmt.Errorf("collection name is required")
+	}
+	config, err := loadCollections()
+	if err != nil {
+		return err
+	}
+	for _, c := range config.Collections {
+		if c.Name == name {
+			return fmt.Errorf("collection already exists: %s", name)
+		}
+	}
+	config.Collections = append(config.Collections, SkillCollection{
+		Name:        name,
+		Description: description,
+		Skills:      skills,
+		CreatedAt:   time.Now().Format(time.RFC3339),
+	})
+	return saveCollections(config)
+}
+
+// DeleteCollection 删除集合
+func (ss *SkillsService) DeleteCollection(name string) error {
+	config, err := loadCollections()
+	if err != nil {
+		return err
+	}
+	found := false
+	result := make([]SkillCollection, 0, len(config.Collections))
+	for _, c := range config.Collections {
+		if c.Name == name {
+			found = true
+			continue
+		}
+		result = append(result, c)
+	}
+	if !found {
+		return fmt.Errorf("collection not found: %s", name)
+	}
+	config.Collections = result
+	return saveCollections(config)
+}
+
+// UpdateCollection 更新集合
+func (ss *SkillsService) UpdateCollection(name string, description string, skills []string) error {
+	config, err := loadCollections()
+	if err != nil {
+		return err
+	}
+	for i, c := range config.Collections {
+		if c.Name == name {
+			config.Collections[i].Description = description
+			config.Collections[i].Skills = skills
+			return saveCollections(config)
+		}
+	}
+	return fmt.Errorf("collection not found: %s", name)
+}
+
+// InstallCollection 一键安装整个集合的所有 skills
+func (ss *SkillsService) InstallCollection(name string, agents []string) (int, error) {
+	config, err := loadCollections()
+	if err != nil {
+		return 0, err
+	}
+	var collection *SkillCollection
+	for _, c := range config.Collections {
+		if c.Name == name {
+			collection = &c
+			break
+		}
+	}
+	if collection == nil {
+		return 0, fmt.Errorf("collection not found: %s", name)
+	}
+
+	installed := 0
+	for _, fullName := range collection.Skills {
+		if err := ss.InstallRemoteSkill(fullName, agents); err != nil {
+			continue
+		}
+		installed++
+	}
+	return installed, nil
+}
+
+// ---- 一键克隆项目配置 ----
+
+// CloneProjectConfig 将一个项目的 skills 和 agent 配置复制到另一个项目
+func (ss *SkillsService) CloneProjectConfig(sourcePath string, targetPath string) (int, error) {
+	if sourcePath == "" || targetPath == "" {
+		return 0, fmt.Errorf("source and target paths are required")
+	}
+
+	// 获取源项目的 skills
+	sourceSkills, err := ss.GetProjectSkills(sourcePath)
+	if err != nil {
+		return 0, fmt.Errorf("failed to read source project: %v", err)
+	}
+
+	homeDir, _ := os.UserHomeDir()
+	centralSkillsDir := filepath.Join(homeDir, ".agents", "skills")
+	installed := 0
+
+	for _, skill := range sourceSkills {
+		// 获取这个 skill 在源项目中链接的 agents
+		for _, agent := range getAllAgentConfigs() {
+			agentSkillsDir := filepath.Join(targetPath, agent.LocalPath)
+			targetSkillPath := filepath.Join(agentSkillsDir, skill.Name)
+
+			// 检查源项目中是否存在
+			sourceSkillPath := filepath.Join(sourcePath, agent.LocalPath, skill.Name)
+			if _, err := os.Stat(sourceSkillPath); os.IsNotExist(err) {
+				continue
+			}
+
+			// 确保目标目录存在
+			if err := os.MkdirAll(agentSkillsDir, 0755); err != nil {
+				continue
+			}
+
+			// 跳过已存在的
+			if _, err := os.Lstat(targetSkillPath); err == nil {
+				continue
+			}
+
+			if skill.IsGlobal {
+				// 全局 skill：创建软链接
+				globalPath := filepath.Join(centralSkillsDir, skill.Name)
+				if err := os.Symlink(globalPath, targetSkillPath); err == nil {
+					installed++
+				}
+			} else {
+				// 本地 skill：复制
+				if err := copyDir(sourceSkillPath, targetSkillPath); err == nil {
+					installed++
+				}
+			}
+		}
+	}
+
+	return installed, nil
+}
+
+// ---- 设置页 ----
+
+// AppSettings 应用设置
+type AppSettings struct {
+	Theme           string   `json:"theme"`           // light, dark, system
+	Language        string   `json:"language"`         // zh, en
+	AutoUpdate      bool     `json:"autoUpdate"`
+	UpdateInterval  int      `json:"updateInterval"`   // hours
+	DefaultAgents   []string `json:"defaultAgents"`    // 默认安装到的 agents
+	ShowPath        bool     `json:"showPath"`         // 卡片是否显示路径
+	CompactMode     bool     `json:"compactMode"`      // 紧凑模式
+}
+
+func getSettingsFilePath() (string, error) {
+	configDir, err := getConfigDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(configDir, "settings.json"), nil
+}
+
+// GetSettings 获取应用设置
+func (ss *SkillsService) GetSettings() (*AppSettings, error) {
+	filePath, err := getSettingsFilePath()
+	if err != nil {
+		return defaultSettings(), nil
+	}
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return defaultSettings(), nil
+	}
+	var settings AppSettings
+	if err := json.Unmarshal(data, &settings); err != nil {
+		return defaultSettings(), nil
+	}
+	return &settings, nil
+}
+
+// SaveSettings 保存应用设置
+func (ss *SkillsService) SaveSettings(settingsJSON string) error {
+	var settings AppSettings
+	if err := json.Unmarshal([]byte(settingsJSON), &settings); err != nil {
+		return fmt.Errorf("invalid settings format: %v", err)
+	}
+	filePath, err := getSettingsFilePath()
+	if err != nil {
+		return err
+	}
+	data, err := json.MarshalIndent(settings, "", "  ")
+	if err != nil {
+		return err
+	}
+	// 同步自动更新配置
+	ss.SetAutoUpdateConfig(settings.AutoUpdate, settings.UpdateInterval)
+	return os.WriteFile(filePath, data, 0644)
+}
+
+func defaultSettings() *AppSettings {
+	// 默认选中所有 agent
+	allAgentNames := make([]string, 0)
+	for _, agent := range getAllAgentConfigs() {
+		allAgentNames = append(allAgentNames, agent.Name)
+	}
+	return &AppSettings{
+		Theme:          "light",
+		Language:       "zh",
+		AutoUpdate:     false,
+		UpdateInterval: 24,
+		DefaultAgents:  allAgentNames,
+		ShowPath:       true,
+		CompactMode:    false,
+	}
+}
+
+// RunAutoUpdate 执行自动更新检查并更新
+func (ss *SkillsService) RunAutoUpdate() (int, error) {
+	config, err := ss.GetAutoUpdateConfig()
+	if err != nil || !config.Enabled {
+		return 0, nil
+	}
+
+	updates, err := ss.CheckSkillUpdates()
+	if err != nil {
+		return 0, err
+	}
+
+	updated := 0
+	for _, u := range updates {
+		if u.HasUpdate {
+			if err := ss.UpdateSkill(u.Name); err == nil {
+				updated++
+			}
+		}
+	}
+
+	// 更新 lastCheck 时间
+	ss.SetAutoUpdateConfig(config.Enabled, config.IntervalHours)
+
+	return updated, nil
 }

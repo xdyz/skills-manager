@@ -11,8 +11,11 @@ import {
   RefreshIcon,
   Settings02Icon,
   LinkSquare02Icon,
+  ArrowUp02Icon,
+  FavouriteIcon,
 } from "hugeicons-react"
 import { BrowserOpenURL } from "@wailsjs/runtime/runtime"
+import TagManager from "@/components/TagManager"
 import type { SkillData } from "@/types"
 
 interface SkillCardProps {
@@ -31,6 +34,14 @@ interface SkillCardProps {
   selectable?: boolean
   selected?: boolean
   onSelect?: (skillName: string, selected: boolean) => void
+  /** 是否有可用更新 */
+  hasUpdate?: boolean
+  /** 标签 */
+  tags?: string[]
+  onTagsChange?: (tags: string[]) => void
+  /** 是否已收藏 */
+  isFavorite?: boolean
+  onToggleFavorite?: (skillName: string) => void
 }
 
 const SkillCard = ({
@@ -47,6 +58,11 @@ const SkillCard = ({
   selectable = false,
   selected = false,
   onSelect,
+  hasUpdate = false,
+  tags = [],
+  onTagsChange,
+  isFavorite = false,
+  onToggleFavorite,
 }: SkillCardProps) => {
   const { t } = useTranslation()
   const navigate = useNavigate()
@@ -81,7 +97,18 @@ const SkillCard = ({
               <CodeIcon size={18} className="text-primary" />
             </div>
             <div className="flex-1 min-w-0">
-              <CardTitle className="text-[13px] truncate">{skill.name}</CardTitle>
+              <div className="flex items-center gap-1.5">
+                <CardTitle className="text-[13px] truncate">{skill.name}</CardTitle>
+                {isFavorite && (
+                  <FavouriteIcon size={12} className="text-amber-500 fill-amber-500 shrink-0" />
+                )}
+                {hasUpdate && (
+                  <Badge variant="outline" className="text-[9px] px-1.5 py-0 border-amber-500/40 text-amber-500 bg-amber-500/10 shrink-0">
+                    <ArrowUp02Icon size={10} className="mr-0.5" />
+                    {t("update-available")}
+                  </Badge>
+                )}
+              </div>
               {showPath && skill.path && (
                 <CardDescription className="text-[11px] truncate mt-1">{skill.path}</CardDescription>
               )}
@@ -97,6 +124,11 @@ const SkillCard = ({
           <div className="flex flex-wrap gap-2 mb-3">
             {skill.language && <Badge variant="secondary" className="text-xs">{skill.language}</Badge>}
             {skill.framework && <Badge variant="outline" className="text-xs">{skill.framework}</Badge>}
+          </div>
+        )}
+        {onTagsChange && (
+          <div className="mb-3">
+            <TagManager skillName={skill.name} tags={tags} onTagsChange={onTagsChange} compact />
           </div>
         )}
         {skill.agents && skill.agents.length > 0 && (
@@ -115,6 +147,16 @@ const SkillCard = ({
       </CardContent>
       <CardFooter className={`flex justify-end gap-1 pt-4 ${selectable ? "hidden" : ""}`} onClick={(e) => e.stopPropagation()}>
         <TooltipProvider delayDuration={300}>
+          {onToggleFavorite && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="icon" className={`h-7 w-7 rounded ${isFavorite ? "text-amber-500 hover:text-amber-600 hover:bg-amber-500/10" : "text-muted-foreground hover:text-amber-500 hover:bg-amber-500/10"}`} onClick={() => onToggleFavorite(skill.name)}>
+                  <FavouriteIcon size={14} className={isFavorite ? "fill-amber-500" : ""} />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>{isFavorite ? t("remove-from-favorites") : t("add-to-favorites")}</TooltipContent>
+            </Tooltip>
+          )}
           {skill.source && (
             <Tooltip>
               <TooltipTrigger asChild>

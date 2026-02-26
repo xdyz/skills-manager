@@ -3,23 +3,81 @@
 import {services} from '../models';
 import {context} from '../models';
 
+export function AddActivityLog(arg1:string,arg2:string,arg3:string):Promise<void>;
+
+export function AddCustomSource(arg1:string,arg2:string,arg3:string):Promise<void>;
+
 export function BatchDeleteSkills(arg1:Array<string>):Promise<number>;
 
 export function BatchUpdateSkillAgentLinks(arg1:Array<string>,arg2:Array<string>):Promise<number>;
 
+export function CheckSkillUpdates():Promise<Array<services.SkillUpdateInfo>>;
+
+export function ClearActivityLogs():Promise<void>;
+
+export function CloneProjectConfig(arg1:string,arg2:string):Promise<number>;
+
+export function CreateCollection(arg1:string,arg2:string,arg3:Array<string>):Promise<void>;
+
+export function CreateSkill(arg1:string,arg2:string,arg3:string,arg4:Array<string>):Promise<void>;
+
+export function DeleteCollection(arg1:string):Promise<void>;
+
 export function DeleteSkill(arg1:string):Promise<void>;
+
+export function DetectProjectType(arg1:string):Promise<services.ProjectTypeInfo>;
+
+export function ExportConfig():Promise<services.ExportedConfig>;
+
+export function ExportConfigToFile():Promise<string>;
 
 export function FindRemoteSkills(arg1:string):Promise<Array<services.RemoteSkill>>;
 
+export function GetActivityLogs(arg1:number):Promise<Array<services.ActivityLog>>;
+
 export function GetAllAgentSkills():Promise<Array<services.Skills>>;
+
+export function GetAllSkillTagsMap():Promise<Record<string, Array<string>>>;
+
+export function GetAllTags():Promise<Record<string, Array<string>>>;
+
+export function GetAutoUpdateConfig():Promise<services.AutoUpdateConfig>;
+
+export function GetAvailableEditors():Promise<Array<services.EditorInfo>>;
+
+export function GetCollections():Promise<Array<services.SkillCollection>>;
+
+export function GetCustomSources():Promise<Array<services.CustomSource>>;
+
+export function GetDashboardStats():Promise<services.DashboardStats>;
+
+export function GetFavorites():Promise<Array<string>>;
 
 export function GetProjectSkillAgentLinks(arg1:string,arg2:string):Promise<Array<string>>;
 
 export function GetProjectSkills(arg1:string):Promise<Array<services.ProjectSkill>>;
 
+export function GetRecommendations():Promise<Array<services.RecommendedSkill>>;
+
+export function GetSettings():Promise<services.AppSettings>;
+
 export function GetSkillAgentLinks(arg1:string):Promise<Array<string>>;
 
 export function GetSkillDetail(arg1:string):Promise<services.SkillDetail>;
+
+export function GetSkillDiff(arg1:string):Promise<services.SkillDiff>;
+
+export function GetSkillFiles(arg1:string):Promise<Array<services.SkillFile>>;
+
+export function GetSkillTags(arg1:string):Promise<Array<string>>;
+
+export function GetSkillTemplates():Promise<Array<services.SkillTemplate>>;
+
+export function HealthCheck():Promise<services.HealthCheckResult>;
+
+export function ImportConfig(arg1:string):Promise<services.ImportResult>;
+
+export function InstallCollection(arg1:string,arg2:Array<string>):Promise<number>;
 
 export function InstallRemoteSkill(arg1:string,arg2:Array<string>):Promise<void>;
 
@@ -27,9 +85,35 @@ export function InstallRemoteSkillToProject(arg1:string,arg2:string,arg3:Array<s
 
 export function InstallSkillToProject(arg1:string,arg2:string,arg3:Array<string>):Promise<void>;
 
+export function OpenSkillInEditor(arg1:string,arg2:string):Promise<void>;
+
+export function OpenSkillInSystemEditor(arg1:string):Promise<void>;
+
+export function PreviewRemoteSkill(arg1:string):Promise<string>;
+
+export function RemoveCustomSource(arg1:string):Promise<void>;
+
 export function RemoveSkillFromProject(arg1:string,arg2:string):Promise<void>;
 
+export function RepairBrokenLinks():Promise<number>;
+
+export function RunAutoUpdate():Promise<number>;
+
+export function SaveSettings(arg1:string):Promise<void>;
+
+export function SaveSkillContent(arg1:string,arg2:string):Promise<void>;
+
+export function SearchCustomSource(arg1:string):Promise<Array<services.RemoteSkill>>;
+
+export function SetAutoUpdateConfig(arg1:boolean,arg2:number):Promise<void>;
+
+export function SetSkillTags(arg1:string,arg2:Array<string>):Promise<void>;
+
 export function Startup(arg1:context.Context):Promise<void>;
+
+export function ToggleFavorite(arg1:string):Promise<boolean>;
+
+export function UpdateCollection(arg1:string,arg2:string,arg3:Array<string>):Promise<void>;
 
 export function UpdateProjectSkillAgentLinks(arg1:string,arg2:string,arg3:Array<string>):Promise<void>;
 

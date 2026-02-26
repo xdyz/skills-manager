@@ -33,6 +33,8 @@ import {
   Folder01Icon,
   RefreshIcon,
   MultiplicationSignIcon,
+  AiBrain01Icon,
+  Copy01Icon,
 } from "hugeicons-react"
 import {
   GetProjectSkills,
@@ -40,6 +42,7 @@ import {
   RemoveSkillFromProject,
   GetProjectSkillAgentLinks,
   UpdateProjectSkillAgentLinks,
+  CloneProjectConfig,
 } from "@wailsjs/go/services/SkillsService"
 import {
   GetProjectAgents,
@@ -49,10 +52,12 @@ import {
   GetProjectAgentSkillCount,
 } from "@wailsjs/go/services/AgentService"
 import { useSearchParams } from "react-router-dom"
+import { SelectFolder } from "@wailsjs/go/services/FolderService"
 import RemoteSkillSearch, { type RemoteSkill } from "@/components/RemoteSkillSearch"
 import SkillCard from "@/components/SkillCard"
 import ConfigAgentLinkDialog from "@/components/ConfigAgentLinkDialog"
 import AgentSelectDialog from "@/components/AgentSelectDialog"
+import ProjectWizardDialog from "@/components/ProjectWizardDialog"
 import type { AgentInfo, SkillData } from "@/types"
 
 const ProjectsPage = () => {
@@ -77,6 +82,8 @@ const ProjectsPage = () => {
   const [agentFilterQuery, setAgentFilterQuery] = useState("")
   const [disableAgentConfirm, setDisableAgentConfirm] = useState<{ name: string; skillCount: number } | null>(null)
   const [skillFilterQuery, setSkillFilterQuery] = useState("")
+  const [wizardOpen, setWizardOpen] = useState(false)
+  const [cloning, setCloning] = useState(false)
 
   useEffect(() => {
     if (folderPath) {
@@ -264,6 +271,22 @@ const ProjectsPage = () => {
     toast({ title: t("toast-links-updated", { name: skillName, count: agents.length }), variant: "success" })
   }
 
+  const handleCloneConfig = async () => {
+    if (!folderPath) return
+    try {
+      setCloning(true)
+      const sourceFolder = await SelectFolder()
+      if (!sourceFolder) return
+      const count = await CloneProjectConfig(sourceFolder, folderPath)
+      toast({ title: t("toast-clone-success", { count }), variant: "success" })
+      await loadProjectSkills(folderPath)
+    } catch (error) {
+      toast({ title: t("toast-clone-failed", { error }), variant: "destructive" })
+    } finally {
+      setCloning(false)
+    }
+  }
+
   if (!folderPath) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-center">
@@ -307,6 +330,14 @@ const ProjectsPage = () => {
                 </button>
               )}
             </div>
+            <Button size="sm" variant="outline" onClick={() => setWizardOpen(true)}>
+              <AiBrain01Icon size={14} className="mr-1.5" />
+              {t("project-wizard")}
+            </Button>
+            <Button size="sm" variant="outline" onClick={handleCloneConfig} disabled={cloning}>
+              <Copy01Icon size={14} className="mr-1.5" />
+              {cloning ? t("cloning") : t("clone-config")}
+            </Button>
             <Button size="sm" onClick={() => setShowInstallDialog(true)}>
               <Add01Icon size={14} className="mr-1.5" />
               {t("install-skill")}
@@ -526,6 +557,14 @@ const ProjectsPage = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Project Wizard Dialog */}
+      <ProjectWizardDialog
+        open={wizardOpen}
+        onOpenChange={setWizardOpen}
+        projectPath={folderPath || ""}
+        onComplete={() => folderPath && loadProjectSkills(folderPath)}
+      />
     </Tabs>
   )
 }
