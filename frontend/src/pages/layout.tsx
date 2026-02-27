@@ -56,6 +56,7 @@ import {
   Store01Icon,
   GitBranchIcon,
   ComputerIcon,
+  ArrowDataTransferHorizontalIcon,
 } from "hugeicons-react"
 import { useState, useEffect, useRef, useCallback } from "react"
 import { SelectFolder, GetFolders, RemoveFolder } from "@wailsjs/go/services/FolderService"
@@ -154,6 +155,7 @@ const PageLayout = () => {
       if ((e.metaKey || e.ctrlKey) && e.key === "3") { e.preventDefault(); navigate("/agents") }
       if ((e.metaKey || e.ctrlKey) && e.key === "4") { e.preventDefault(); navigate("/projects") }
       if ((e.metaKey || e.ctrlKey) && e.key === "5") { e.preventDefault(); navigate("/settings") }
+      if ((e.metaKey || e.ctrlKey) && e.key === "6") { e.preventDefault(); navigate("/providers") }
       if ((e.metaKey || e.ctrlKey) && e.key === ",") { e.preventDefault(); navigate("/settings") }
     }
     window.addEventListener("keydown", handleKeyDown)
@@ -468,6 +470,14 @@ const PageLayout = () => {
             >
               <GitBranchIcon size={15} />
               {t("analysis-title")}
+            </Button>
+            <Button
+              variant={isActive("/providers") ? "secondary" : "ghost"}
+              className={`justify-start gap-2.5 h-8 text-[13px] rounded ${isActive("/providers") ? "bg-primary/10 text-primary font-medium" : "text-muted-foreground hover:text-foreground"}`}
+              onClick={() => navigate("/providers")}
+            >
+              <ArrowDataTransferHorizontalIcon size={15} />
+              {t("prov-nav")}
             </Button>
 
             <div className="h-px bg-border/50 my-1.5" />

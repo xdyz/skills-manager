@@ -32,12 +32,14 @@ func main() {
 	searchService := services.NewSearchService(skillsService)
 	profileService := services.NewProfileService(skillsService)
 	ratingService := services.NewRatingService()
+	providerService := services.NewProviderService()
 
 	// Create application with options
 	err := wails.Run(&options.App{
-		Title:  "Skills Manager",
-		Width:  1024,
-		Height: 768,
+		Title:             "Skills Manager",
+		Width:             1024,
+		Height:            768,
+		HideWindowOnClose: true,
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},
@@ -58,6 +60,7 @@ func main() {
 			searchService.Startup(ctx)
 			profileService.Startup(ctx)
 			ratingService.Startup(ctx)
+			providerService.Startup(ctx)
 		},
 		Bind: []interface{}{
 			app,
@@ -73,6 +76,7 @@ func main() {
 			searchService,
 			profileService,
 			ratingService,
+			providerService,
 		},
 		Debug: options.Debug{
 			OpenInspectorOnStartup: true,

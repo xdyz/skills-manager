@@ -12,6 +12,8 @@ const SettingsPage = lazy(() => import("../pages/settings"))
 const CollectionsPage = lazy(() => import("../pages/collections"))
 const DiscoverPage = lazy(() => import("../pages/discover"))
 const AnalysisPage = lazy(() => import("../pages/analysis"))
+const ProvidersPage = lazy(() => import("../pages/providers"))
+const ProviderFormPage = lazy(() => import("../pages/providers/form"))
 
 const PageFallback = () => (
   <div className="flex items-center justify-center h-64">
@@ -75,6 +77,18 @@ const routes = createHashRouter([
       {
         path: "analysis",
         element: withSuspense(AnalysisPage)
+      },
+      {
+        path: "providers",
+        element: withSuspense(ProvidersPage)
+      },
+      {
+        path: "providers/add",
+        element: withSuspense(ProviderFormPage)
+      },
+      {
+        path: "providers/edit",
+        element: withSuspense(ProviderFormPage)
       }
     ]
   }
