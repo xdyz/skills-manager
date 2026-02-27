@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { toast } from "@/components/ui/use-toast"
 import {
   Dialog,
@@ -32,6 +33,7 @@ import {
   RefreshIcon,
   Folder01Icon,
   CodeIcon,
+  Configuration01Icon,
 } from "hugeicons-react"
 import {
   GetCollections,
@@ -43,6 +45,7 @@ import {
 } from "@wailsjs/go/services/SkillsService"
 import { GetSupportedAgents } from "@wailsjs/go/services/AgentService"
 import type { AgentInfo } from "@/types"
+import ProfilesPage from "../profiles"
 
 interface SkillCollection {
   name: string
@@ -53,6 +56,7 @@ interface SkillCollection {
 
 const CollectionsPage = () => {
   const { t } = useTranslation()
+  const [activeTab, setActiveTab] = useState<"collections" | "profiles">("collections")
   const [collections, setCollections] = useState<SkillCollection[]>([])
   const [loading, setLoading] = useState(true)
   const [showCreateDialog, setShowCreateDialog] = useState(false)
@@ -182,19 +186,36 @@ const CollectionsPage = () => {
 
   return (
     <div className="flex flex-col h-full w-full">
-      <div className="shrink-0 px-6 pt-6 pb-4 border-b border-border/50">
+      <div className="shrink-0 px-6 pt-5 pb-0 border-b border-border/50">
         <div className="flex items-center justify-between">
           <div className="space-y-1">
             <h1 className="text-lg font-semibold tracking-tight text-foreground/90">{t("collections")}</h1>
             <p className="text-[13px] text-muted-foreground">{t("collections-desc")}</p>
           </div>
-          <Button size="sm" onClick={openCreate}>
-            <Add01Icon size={14} className="mr-1.5" />
-            {t("create-collection")}
-          </Button>
+          {activeTab === "collections" && (
+            <Button size="sm" onClick={openCreate}>
+              <Add01Icon size={14} className="mr-1.5" />
+              {t("create-collection")}
+            </Button>
+          )}
         </div>
+        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "collections" | "profiles")} className="mt-3">
+          <TabsList className="h-9">
+            <TabsTrigger value="collections" className="text-[12px] gap-1.5">
+              <Folder01Icon size={13} />
+              {t("collections")}
+            </TabsTrigger>
+            <TabsTrigger value="profiles" className="text-[12px] gap-1.5">
+              <Configuration01Icon size={13} />
+              {t("profiles-nav")}
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
       </div>
 
+      {activeTab === "profiles" ? (
+        <ProfilesPage />
+      ) : (<>
       <div className="flex-1 overflow-y-auto p-6">
         {collections.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full min-h-[360px] select-none">
@@ -350,6 +371,8 @@ const CollectionsPage = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      </>)}
+
     </div>
   )
 }

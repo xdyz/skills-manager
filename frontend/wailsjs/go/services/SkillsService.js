@@ -14,6 +14,10 @@ export function BatchDeleteSkills(arg1) {
   return window['go']['services']['SkillsService']['BatchDeleteSkills'](arg1);
 }
 
+export function BatchInstallFromRepo(arg1, arg2) {
+  return window['go']['services']['SkillsService']['BatchInstallFromRepo'](arg1, arg2);
+}
+
 export function BatchUpdateSkillAgentLinks(arg1, arg2) {
   return window['go']['services']['SkillsService']['BatchUpdateSkillAgentLinks'](arg1, arg2);
 }
@@ -28,6 +32,10 @@ export function ClearActivityLogs() {
 
 export function CloneProjectConfig(arg1, arg2) {
   return window['go']['services']['SkillsService']['CloneProjectConfig'](arg1, arg2);
+}
+
+export function CompareSkills(arg1, arg2) {
+  return window['go']['services']['SkillsService']['CompareSkills'](arg1, arg2);
 }
 
 export function CreateCollection(arg1, arg2, arg3) {
@@ -200,6 +208,10 @@ export function SaveSettings(arg1) {
 
 export function SaveSkillContent(arg1, arg2) {
   return window['go']['services']['SkillsService']['SaveSkillContent'](arg1, arg2);
+}
+
+export function ScanGitHubRepo(arg1) {
+  return window['go']['services']['SkillsService']['ScanGitHubRepo'](arg1);
 }
 
 export function SearchCustomSource(arg1) {

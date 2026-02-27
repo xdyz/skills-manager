@@ -119,6 +119,18 @@ func shellOutput(command string) (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
+// gitClone 安全执行 git clone，避免 shell 注入
+func gitClone(repoURL, destDir string) ([]byte, error) {
+	cmd := exec.Command("git", "clone", "--depth", "1", repoURL, destDir)
+	return cmd.CombinedOutput()
+}
+
+// safeExecCommand 安全执行命令，避免 shell 注入
+func safeExecCommand(name string, args ...string) ([]byte, error) {
+	cmd := exec.Command(name, args...)
+	return cmd.CombinedOutput()
+}
+
 func (ss *SkillsService) GetAllAgentSkills() ([]Skills, error) {
 	// 1. 获取用户主目录
 	homeDir, err := os.UserHomeDir()
@@ -545,7 +557,7 @@ func (ss *SkillsService) FindRemoteSkills(query string) ([]RemoteSkill, error) {
 
 // findRemoteSkillsFallback 回退到 CLI 搜索
 func (ss *SkillsService) findRemoteSkillsFallback(query string) ([]RemoteSkill, error) {
-	output, err := shellRun(fmt.Sprintf("npx skills find '%s'", query))
+	output, err := safeExecCommand("npx", "skills", "find", query)
 	if err != nil {
 		return nil, fmt.Errorf("failed to search remote skills: %v", err)
 	}
@@ -591,6 +603,28 @@ var agentFileMapping = []struct {
 	{".windsurfrules", "Windsurf"},
 }
 
+// guessSkillDirNames 根据技能名猜测可能的仓库目录名
+// 例如 "vercel-react-best-practices" 在 "vercel-labs/agent-skills" 仓库中
+// 实际目录名可能是 "react-best-practices"（去掉了 owner 相关前缀）
+func guessSkillDirNames(skillName, owner string) []string {
+	names := []string{skillName}
+
+	// 尝试去掉 owner 名（或 owner 名中 -labs/-io/-dev 等后缀之前的部分）作为前缀
+	ownerPrefixes := []string{owner + "-"}
+	// 从 owner 中提取主名称，如 "vercel-labs" -> "vercel"
+	if parts := strings.SplitN(owner, "-", 2); len(parts) > 1 {
+		ownerPrefixes = append(ownerPrefixes, parts[0]+"-")
+	}
+
+	for _, prefix := range ownerPrefixes {
+		if stripped, found := strings.CutPrefix(skillName, prefix); found && stripped != "" {
+			names = append(names, stripped)
+		}
+	}
+
+	return names
+}
+
 // checkSkillSupportedAgents 并发检测每个 skill 支持哪些 agent
 // 通过 GitHub raw URL 的 HEAD 请求检测仓库中有哪些格式文件
 func checkSkillSupportedAgents(skills []RemoteSkill) {
@@ -609,6 +643,9 @@ func checkSkillSupportedAgents(skills []RemoteSkill) {
 				return
 			}
 
+			// 猜测可能的目录名（原名 + 去掉 owner 前缀的变体）
+			dirNames := guessSkillDirNames(s.Name, s.Owner)
+
 			var mu sync.Mutex
 			var innerWg sync.WaitGroup
 
@@ -616,10 +653,13 @@ func checkSkillSupportedAgents(skills []RemoteSkill) {
 				innerWg.Add(1)
 				go func(fileName, agentName string) {
 					defer innerWg.Done()
-					// 尝试常见路径
-					paths := []string{
-						fmt.Sprintf("https://raw.githubusercontent.com/%s/%s/main/skills/%s/%s", s.Owner, s.Repo, s.Name, fileName),
-						fmt.Sprintf("https://raw.githubusercontent.com/%s/%s/main/%s/%s", s.Owner, s.Repo, s.Name, fileName),
+					// 构建所有可能的路径
+					var paths []string
+					for _, dirName := range dirNames {
+						paths = append(paths,
+							fmt.Sprintf("https://raw.githubusercontent.com/%s/%s/main/skills/%s/%s", s.Owner, s.Repo, dirName, fileName),
+							fmt.Sprintf("https://raw.githubusercontent.com/%s/%s/main/%s/%s", s.Owner, s.Repo, dirName, fileName),
+						)
 					}
 					// 根目录只对单 skill 仓库检查
 					if fileName == "SKILL.md" || fileName == "CLAUDE.md" || fileName == "AGENTS.md" {
@@ -640,10 +680,6 @@ func checkSkillSupportedAgents(skills []RemoteSkill) {
 				}(mapping.FileName, mapping.Agent)
 			}
 			innerWg.Wait()
-
-			if len(s.SupportedAgents) == 0 {
-			} else {
-			}
 		}(i)
 	}
 	wg.Wait()
@@ -764,7 +800,7 @@ func (ss *SkillsService) InstallRemoteSkill(fullName string, agents []string) er
 	defer os.RemoveAll(tempRepoDir)
 
 	// 克隆仓库
-	cloneOutput, err := shellRun(fmt.Sprintf("git clone --depth 1 '%s' '%s'", repoURL, tempRepoDir))
+	cloneOutput, err := gitClone(repoURL, tempRepoDir)
 	if err != nil {
 		return fmt.Errorf("failed to clone repository: %v\nOutput: %s", err, string(cloneOutput))
 	}
@@ -1226,7 +1262,7 @@ func (ss *SkillsService) UpdateSkill(skillName string) error {
 
 	repoURL := fmt.Sprintf("https://github.com/%s.git", entry.Source)
 
-	cloneOutput, err := shellRun(fmt.Sprintf("git clone --depth 1 '%s' '%s'", repoURL, tempRepoDir))
+	cloneOutput, err := gitClone(repoURL, tempRepoDir)
 	if err != nil {
 		return fmt.Errorf("failed to clone repository: %v\nOutput: %s", err, string(cloneOutput))
 	}
@@ -1333,7 +1369,7 @@ func (ss *SkillsService) InstallRemoteSkillToProject(projectPath string, fullNam
 	os.RemoveAll(tempRepoDir)
 	defer os.RemoveAll(tempRepoDir)
 
-	cloneOutput, err := shellRun(fmt.Sprintf("git clone --depth 1 '%s' '%s'", repoURL, tempRepoDir))
+	cloneOutput, err := gitClone(repoURL, tempRepoDir)
 	if err != nil {
 		return fmt.Errorf("failed to clone repository: %v\nOutput: %s", err, string(cloneOutput))
 	}
@@ -2501,12 +2537,12 @@ func (ss *SkillsService) GetAvailableEditors() []EditorInfo {
 	return available
 }
 
-// editorOpenArgs 不同编辑器打开目录时需要的额外参数
-var editorOpenArgs = map[string][]string{
-	"code":     {"-n"},  // VS Code: --new-window
-	"cursor":   {"-n"},  // Cursor: --new-window
-	"buddycn":  {"-n"},  // CodeBuddy: --new-window
-	"windsurf": {"-n"},  // Windsurf: --new-window
+// editorAppNames VS Code 系列编辑器对应的 macOS App 名称
+var editorAppNames = map[string]string{
+	"code":     "Visual Studio Code",
+	"cursor":   "Cursor",
+	"buddycn":  "CodeBuddy CN",
+	"windsurf": "Windsurf",
 }
 
 // OpenSkillInEditor 在指定编辑器中打开 skill 目录
@@ -2521,15 +2557,39 @@ func (ss *SkillsService) OpenSkillInEditor(skillName string, editorID string) er
 		return fmt.Errorf("skill not found: %s", skillName)
 	}
 
-	// 构建命令参数
-	extraArgs := ""
-	if args, ok := editorOpenArgs[editorID]; ok {
-		extraArgs = strings.Join(args, " ") + " "
+	// 查找 SKILL.md，打开目录时同时打开文件以确保 Explorer 展开
+	skillFile := filepath.Join(skillDir, "SKILL.md")
+	hasSkillFile := false
+	if _, err := os.Stat(skillFile); err == nil {
+		hasSkillFile = true
 	}
 
-	// 通过 login shell 执行，确保 GUI 应用能找到正确的 CLI 工具路径
-	cmd := fmt.Sprintf("%s %s'%s'", editorID, extraArgs, skillDir)
-	_, err = shellRun(cmd)
+	// 对于 VS Code 系列编辑器，用 open -a 通过 macOS 原生方式打开，确保侧边栏正常展开
+	if appName, ok := editorAppNames[editorID]; ok {
+		appPath := fmt.Sprintf("/Applications/%s.app", appName)
+		if _, err := os.Stat(appPath); err == nil {
+			// 先用 open -a 打开目录
+			if _, err = safeExecCommand("open", "-a", appName, skillDir); err != nil {
+				return err
+			}
+			// 等待编辑器启动
+			time.Sleep(500 * time.Millisecond)
+			// 然后用 CLI 打开文件
+			if hasSkillFile {
+				_, err = safeExecCommand(editorID, "-g", skillFile+":1")
+			} else {
+				_, err = safeExecCommand(editorID, skillDir)
+			}
+			return err
+		}
+	}
+
+	// 其他编辑器直接用 CLI 打开
+	args := []string{skillDir}
+	if hasSkillFile {
+		args = append(args, "-g", skillFile+":1")
+	}
+	_, err = safeExecCommand(editorID, args...)
 	return err
 }
 
@@ -2563,11 +2623,17 @@ func (ss *SkillsService) GetSkillFiles(skillName string) ([]SkillFile, error) {
 		if relPath == "." {
 			return nil
 		}
-		files = append(files, SkillFile{
+		sf := SkillFile{
 			Name:  relPath,
 			IsDir: info.IsDir(),
 			Size:  info.Size(),
-		})
+		}
+		if !info.IsDir() {
+			if data, err := os.ReadFile(path); err == nil {
+				sf.Content = string(data)
+			}
+		}
+		files = append(files, sf)
 		return nil
 	})
 	if err != nil {
@@ -2579,9 +2645,10 @@ func (ss *SkillsService) GetSkillFiles(skillName string) ([]SkillFile, error) {
 
 // SkillFile 技能目录中的文件信息
 type SkillFile struct {
-	Name  string `json:"name"`
-	IsDir bool   `json:"isDir"`
-	Size  int64  `json:"size"`
+	Name    string `json:"name"`
+	IsDir   bool   `json:"isDir"`
+	Size    int64  `json:"size"`
+	Content string `json:"content"`
 }
 
 // ---- Diff 预览 ----
@@ -2635,7 +2702,7 @@ func (ss *SkillsService) GetSkillDiff(skillName string) (*SkillDiff, error) {
 	os.RemoveAll(tempRepoDir)
 	defer os.RemoveAll(tempRepoDir)
 
-	cloneOutput, err := shellRun(fmt.Sprintf("git clone --depth 1 '%s' '%s'", repoURL, tempRepoDir))
+	cloneOutput, err := gitClone(repoURL, tempRepoDir)
 	if err != nil {
 		return nil, fmt.Errorf("failed to clone: %v\n%s", err, string(cloneOutput))
 	}
@@ -2795,8 +2862,7 @@ func (ss *SkillsService) SearchCustomSource(sourceName string) ([]RemoteSkill, e
 	os.RemoveAll(tempDir)
 	defer os.RemoveAll(tempDir)
 
-	cloneCmd := fmt.Sprintf("git clone --depth 1 '%s' '%s'", source.URL, tempDir)
-	if _, err := shellRun(cloneCmd); err != nil {
+	if _, err := gitClone(source.URL, tempDir); err != nil {
 		return nil, fmt.Errorf("failed to clone source: %v", err)
 	}
 
@@ -3612,4 +3678,167 @@ func (ss *SkillsService) RunAutoUpdate() (int, error) {
 	ss.SetAutoUpdateConfig(config.Enabled, config.IntervalHours)
 
 	return updated, nil
+}
+
+// CompareSkills 对比两个技能的信息
+func (ss *SkillsService) CompareSkills(name1 string, name2 string) (*CompareResult, error) {
+	buildInfo := func(name string) (SkillCompareInfo, error) {
+		detail, err := ss.GetSkillDetail(name)
+		if err != nil {
+			return SkillCompareInfo{}, err
+		}
+		tags, _ := ss.GetSkillTags(name)
+		files, _ := ss.GetSkillFiles(name)
+
+		var totalSize int64
+		fileCount := 0
+		for _, f := range files {
+			if !f.IsDir {
+				fileCount++
+				totalSize += f.Size
+			}
+		}
+
+		rating := &SkillRating{}
+		ratingConfig, _ := loadRatings()
+		if r, ok := ratingConfig.Ratings[name]; ok {
+			rating = &r
+		}
+
+		return SkillCompareInfo{
+			Name:      detail.Name,
+			Desc:      detail.Desc,
+			Language:  detail.Language,
+			Framework: detail.Framework,
+			Agents:    detail.Agents,
+			Source:    detail.Source,
+			Tags:      tags,
+			Rating:    rating.Rating,
+			Note:      rating.Note,
+			FileCount: fileCount,
+			TotalSize: totalSize,
+			Content:   detail.Content,
+		}, nil
+	}
+
+	info1, err := buildInfo(name1)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load skill 1: %v", err)
+	}
+	info2, err := buildInfo(name2)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load skill 2: %v", err)
+	}
+
+	return &CompareResult{Skill1: info1, Skill2: info2}, nil
+}
+
+// GitHubRepoSkill 从 GitHub 仓库解析出的技能
+type GitHubRepoSkill struct {
+	Name     string `json:"name"`
+	FullName string `json:"fullName"`
+	Desc     string `json:"desc"`
+}
+
+// ScanGitHubRepo 扫描 GitHub 仓库中的所有技能
+func (ss *SkillsService) ScanGitHubRepo(repoURL string) ([]GitHubRepoSkill, error) {
+	if repoURL == "" {
+		return nil, fmt.Errorf("repository URL is required")
+	}
+
+	// 提取 owner/repo
+	ownerRepo := repoURL
+	// 处理完整 URL
+	for _, prefix := range []string{"https://github.com/", "http://github.com/", "github.com/"} {
+		if len(ownerRepo) > len(prefix) && ownerRepo[:len(prefix)] == prefix {
+			ownerRepo = ownerRepo[len(prefix):]
+		}
+	}
+	ownerRepo = strings.TrimSuffix(ownerRepo, ".git")
+	ownerRepo = strings.TrimSuffix(ownerRepo, "/")
+
+	parts := strings.Split(ownerRepo, "/")
+	if len(parts) < 2 {
+		return nil, fmt.Errorf("invalid repository URL: %s", repoURL)
+	}
+	ownerRepo = parts[0] + "/" + parts[1]
+
+	// 克隆仓库
+	tempDir := filepath.Join(os.TempDir(), "skills-scan-"+parts[1])
+	os.RemoveAll(tempDir)
+	defer os.RemoveAll(tempDir)
+
+	cloneOutput, err := gitClone(fmt.Sprintf("https://github.com/%s.git", ownerRepo), tempDir)
+	if err != nil {
+		return nil, fmt.Errorf("failed to clone repository: %v\n%s", err, string(cloneOutput))
+	}
+
+	var skills []GitHubRepoSkill
+
+	// 扫描 skills/ 目录
+	skillsDir := filepath.Join(tempDir, "skills")
+	if entries, err := os.ReadDir(skillsDir); err == nil {
+		for _, entry := range entries {
+			if !entry.IsDir() || strings.HasPrefix(entry.Name(), ".") {
+				continue
+			}
+			skillPath := filepath.Join(skillsDir, entry.Name())
+			if hasSkillMd(skillPath) {
+				content, _ := os.ReadFile(filepath.Join(skillPath, "SKILL.md"))
+				parsed := parseSkillMd(string(content), skillPath)
+				skills = append(skills, GitHubRepoSkill{
+					Name:     entry.Name(),
+					FullName: fmt.Sprintf("%s@%s", ownerRepo, entry.Name()),
+					Desc:     parsed.Desc,
+				})
+			}
+		}
+	}
+
+	// 如果 skills/ 目录为空，检查根目录
+	if len(skills) == 0 && hasSkillMd(tempDir) {
+		content, _ := os.ReadFile(filepath.Join(tempDir, "SKILL.md"))
+		parsed := parseSkillMd(string(content), tempDir)
+		repoName := parts[1]
+		skills = append(skills, GitHubRepoSkill{
+			Name:     repoName,
+			FullName: fmt.Sprintf("%s@%s", ownerRepo, repoName),
+			Desc:     parsed.Desc,
+		})
+	}
+
+	// 也扫描根目录下的直接子目录
+	if len(skills) == 0 {
+		if entries, err := os.ReadDir(tempDir); err == nil {
+			for _, entry := range entries {
+				if !entry.IsDir() || strings.HasPrefix(entry.Name(), ".") {
+					continue
+				}
+				dirPath := filepath.Join(tempDir, entry.Name())
+				if hasSkillMd(dirPath) {
+					content, _ := os.ReadFile(filepath.Join(dirPath, "SKILL.md"))
+					parsed := parseSkillMd(string(content), dirPath)
+					skills = append(skills, GitHubRepoSkill{
+						Name:     entry.Name(),
+						FullName: fmt.Sprintf("%s@%s", ownerRepo, entry.Name()),
+						Desc:     parsed.Desc,
+					})
+				}
+			}
+		}
+	}
+
+	return skills, nil
+}
+
+// BatchInstallFromRepo 批量从仓库安装选中的技能
+func (ss *SkillsService) BatchInstallFromRepo(fullNames []string, agents []string) (int, error) {
+	installed := 0
+	for _, fullName := range fullNames {
+		if err := ss.InstallRemoteSkill(fullName, agents); err != nil {
+			continue
+		}
+		installed++
+	}
+	return installed, nil
 }

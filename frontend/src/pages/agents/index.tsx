@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
+import { useNavigate } from "react-router-dom"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -30,12 +31,17 @@ import {
   Folder02Icon,
   RefreshIcon,
   MultiplicationSignIcon,
+  ArrowDown01Icon,
+  ArrowUp01Icon,
+  CodeIcon,
 } from "hugeicons-react"
 import { GetSupportedAgents, AddCustomAgent, RemoveCustomAgent } from "@wailsjs/go/services/AgentService"
-import type { AgentInfo } from "@/types"
+import { GetAllAgentSkills } from "@wailsjs/go/services/SkillsService"
+import type { AgentInfo, SkillData } from "@/types"
 
 const AgentsPage = () => {
   const { t } = useTranslation()
+  const navigate = useNavigate()
   const [allAgents, setAllAgents] = useState<AgentInfo[]>([])
   const [agentListSearch, setAgentListSearch] = useState("")
   const [showAddAgentDialog, setShowAddAgentDialog] = useState(false)
@@ -43,8 +49,27 @@ const AgentsPage = () => {
   const [addingAgent, setAddingAgent] = useState(false)
   const [agentToDelete, setAgentToDelete] = useState<string | null>(null)
 
+  // Agent details expansion
+  const [expandedAgent, setExpandedAgent] = useState<string | null>(null)
+  const [allSkills, setAllSkills] = useState<SkillData[]>([])
+
+  // Build agent -> skills mapping
+  const agentSkillsMap = useCallback(() => {
+    const map: Record<string, SkillData[]> = {}
+    for (const skill of allSkills) {
+      if (skill.agents) {
+        for (const agent of skill.agents) {
+          if (!map[agent]) map[agent] = []
+          map[agent].push(skill)
+        }
+      }
+    }
+    return map
+  }, [allSkills])
+
   useEffect(() => {
     loadAgents()
+    GetAllAgentSkills().then(s => setAllSkills(s || [])).catch(() => {})
   }, [])
 
   // Refresh data on window focus
@@ -136,29 +161,62 @@ const AgentsPage = () => {
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-2 md:grid-cols-2 lg:grid-cols-3">
-            {filteredAgents.map((agent) => (
-              <div key={agent.name} className="flex items-center gap-3 p-3 rounded-md border border-border/50 hover:bg-accent/40 transition-all duration-150">
-                <div className={`p-2 rounded shrink-0 ${agent.isCustom ? 'bg-amber-500/10' : 'bg-primary/10'}`}>
-                  <AiChat02Icon size={15} className={agent.isCustom ? 'text-amber-500' : 'text-primary'} />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate">{agent.name}</p>
-                  <p className="text-xs text-muted-foreground truncate">{agent.localPath}</p>
-                </div>
-                <div className="flex items-center gap-1.5 shrink-0">
-                  {agent.isCustom ? (
-                    <>
-                      <Badge variant="outline" className="text-xs text-amber-500 border-amber-500/30">{t("custom")}</Badge>
-                      <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => setAgentToDelete(agent.name)}>
-                        <Delete02Icon size={14} />
-                      </Button>
-                    </>
-                  ) : (
-                    <Badge variant="secondary" className="text-xs">{t("builtin")}</Badge>
+            {filteredAgents.map((agent) => {
+              const skillsMap = agentSkillsMap()
+              const agentSkills = skillsMap[agent.name] || []
+              const isExpanded = expandedAgent === agent.name
+              return (
+                <div key={agent.name} className="rounded-md border border-border/50 transition-all duration-150 overflow-hidden">
+                  <div
+                    className="flex items-center gap-3 p-3 hover:bg-accent/40 cursor-pointer transition-colors"
+                    onClick={() => setExpandedAgent(isExpanded ? null : agent.name)}
+                  >
+                    <div className={`p-2 rounded shrink-0 ${agent.isCustom ? 'bg-amber-500/10' : 'bg-primary/10'}`}>
+                      <AiChat02Icon size={15} className={agent.isCustom ? 'text-amber-500' : 'text-primary'} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{agent.name}</p>
+                      <p className="text-xs text-muted-foreground truncate">{agent.localPath}</p>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <Badge variant="outline" className="text-[10px]">
+                        {agentSkills.length} skills
+                      </Badge>
+                      {agent.isCustom ? (
+                        <>
+                          <Badge variant="outline" className="text-xs text-amber-500 border-amber-500/30">{t("custom")}</Badge>
+                          <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={(e) => { e.stopPropagation(); setAgentToDelete(agent.name) }}>
+                            <Delete02Icon size={14} />
+                          </Button>
+                        </>
+                      ) : (
+                        <Badge variant="secondary" className="text-xs">{t("builtin")}</Badge>
+                      )}
+                      {isExpanded ? <ArrowUp01Icon size={14} className="text-muted-foreground" /> : <ArrowDown01Icon size={14} className="text-muted-foreground" />}
+                    </div>
+                  </div>
+                  {isExpanded && (
+                    <div className="border-t border-border/50 bg-muted/20 px-3 py-2.5 space-y-1.5">
+                      {agentSkills.length === 0 ? (
+                        <p className="text-xs text-muted-foreground/60 py-2 text-center">{t("no-skills")}</p>
+                      ) : (
+                        agentSkills.map(skill => (
+                          <div
+                            key={skill.name}
+                            className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-accent/50 cursor-pointer transition-colors"
+                            onClick={() => navigate(`/skills/detail?name=${encodeURIComponent(skill.name)}`)}
+                          >
+                            <CodeIcon size={12} className="text-primary/70 shrink-0" />
+                            <span className="text-[12px] truncate flex-1">{skill.name}</span>
+                            {skill.language && <Badge variant="outline" className="text-[9px] h-4">{skill.language}</Badge>}
+                          </div>
+                        ))
+                      )}
+                    </div>
                   )}
                 </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         )}
       </div>

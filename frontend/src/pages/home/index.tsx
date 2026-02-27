@@ -59,8 +59,7 @@ const HomePage = () => {
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      setLoading(prev => {
-        if (prev) console.warn("Home page loading timeout, forcing stop")
+      setLoading(_prev => {
         return false
       })
     }, 10000)
@@ -103,7 +102,7 @@ const HomePage = () => {
     try {
       setInstallingRec(fullName)
       const agents = await GetSupportedAgents()
-      const agentNames = (agents || []).map((a: any) => a.name)
+      const agentNames = (agents || []).map((a) => a.name)
       await InstallRemoteSkill(fullName, agentNames)
       toast({ title: t("toast-skill-installed", { name: fullName.split("@")[1] || fullName, count: agentNames.length }), variant: "success" })
       setRecommendations(prev => prev.filter(r => r.name !== fullName))

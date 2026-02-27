@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { useSearchParams, useNavigate } from "react-router-dom"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/ui/button"
@@ -27,6 +27,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { GetRating, SetRating } from "@wailsjs/go/services/RatingService"
 import {
   ArrowLeft02Icon,
   CodeIcon,
@@ -42,14 +43,17 @@ import {
   FavouriteIcon,
   SourceCodeIcon,
   ArrowDown01Icon,
+  StarIcon,
 } from "hugeicons-react"
-import { GetSkillDetail, DeleteSkill, UpdateSkill, GetSkillAgentLinks, UpdateSkillAgentLinks, GetSkillDiff, GetSkillTags, GetFavorites, ToggleFavorite, GetAvailableEditors, OpenSkillInEditor } from "@wailsjs/go/services/SkillsService"
+import { GetSkillDetail, DeleteSkill, UpdateSkill, GetSkillAgentLinks, UpdateSkillAgentLinks, GetSkillDiff, GetSkillTags, GetFavorites, ToggleFavorite, GetAvailableEditors, OpenSkillInEditor, GetSkillFiles } from "@wailsjs/go/services/SkillsService"
 import { GetSupportedAgents } from "@wailsjs/go/services/AgentService"
 import { BrowserOpenURL } from "@wailsjs/runtime/runtime"
 import Markdown from "react-markdown"
+import { diffLines } from "diff"
 import ConfigAgentLinkDialog from "@/components/ConfigAgentLinkDialog"
 import TagManager from "@/components/TagManager"
 import type { AgentInfo } from "@/types"
+import { Input } from "@/components/ui/input"
 
 interface SkillDetailData {
   name: string
@@ -94,6 +98,19 @@ const SkillDetailPage = () => {
   // Available editors
   const [editors, setEditors] = useState<{ id: string; name: string; icon: string; iconBase64: string }[]>([])
 
+  // Skill files (multi-file view)
+  const [skillFiles, setSkillFiles] = useState<{ name: string; isDir: boolean; size: number; content: string }[]>([])
+  const [activeFile, setActiveFile] = useState<string>("SKILL.md")
+
+  // Rating
+  const [rating, setRating] = useState(0)
+  const [ratingNote, setRatingNote] = useState("")
+  const [ratingHover, setRatingHover] = useState(0)
+
+  // Rating service bindings
+  const getRatingFn = (name: string) => GetRating(name).catch(() => ({ rating: 0, note: "" }))
+  const setRatingFn = (name: string, r: number, note: string) => SetRating(name, r, note)
+
   const goBack = () => {
     if (window.history.length > 1) {
       navigate(-1)
@@ -108,8 +125,21 @@ const SkillDetailPage = () => {
       loadAgents()
       GetSkillTags(skillName).then(t => setTags(t || [])).catch(() => {})
       GetFavorites().then(favs => setIsFavorite((favs || []).includes(skillName))).catch(() => {})
+      GetSkillFiles(skillName).then(files => {
+        const fileList = (files || []).filter(f => !f.isDir)
+        setSkillFiles(fileList)
+        if (fileList.length > 0) {
+          setActiveFile(fileList[0].name)
+        }
+      }).catch(() => {})
     }
     GetAvailableEditors().then(e => setEditors(e || [])).catch(() => {})
+    if (skillName) {
+      getRatingFn(skillName).then((r: any) => {
+        setRating(r?.rating || 0)
+        setRatingNote(r?.note || "")
+      }).catch(() => {})
+    }
   }, [skillName])
 
   // Refresh data silently on window focus
@@ -212,6 +242,27 @@ const SkillDetailPage = () => {
     }
   }
 
+  const handleSaveRating = async (newRating: number) => {
+    if (!skillName) return
+    setRating(newRating)
+    try {
+      await setRatingFn(skillName, newRating, ratingNote)
+      toast({ title: t("rating-saved"), variant: "success" })
+    } catch (error) {
+      toast({ title: t("rating-save-failed", { error }), variant: "destructive" })
+    }
+  }
+
+  const handleSaveNote = async () => {
+    if (!skillName) return
+    try {
+      await setRatingFn(skillName, rating, ratingNote)
+      toast({ title: t("rating-saved"), variant: "success" })
+    } catch (error) {
+      toast({ title: t("rating-save-failed", { error }), variant: "destructive" })
+    }
+  }
+
   const formatDate = (dateStr: string) => {
     if (!dateStr) return "-"
     try {
@@ -299,59 +350,58 @@ const SkillDetailPage = () => {
               <TagManager skillName={detail.name} tags={tags} onTagsChange={setTags} compact />
             </div>
           </div>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-1.5 mt-3">
-          <Button variant="outline" size="sm" className={`h-7 text-[12px] ${isFavorite ? "text-amber-500 border-amber-500/40" : ""}`} onClick={async () => {
-            if (!skillName) return
-            const result = await ToggleFavorite(skillName)
-            setIsFavorite(result)
-          }}>
-            <FavouriteIcon size={13} className={`mr-1 ${isFavorite ? "fill-amber-500" : ""}`} />
-            {isFavorite ? t("remove-from-favorites") : t("add-to-favorites")}
-          </Button>
-          <Button variant="outline" size="sm" className="h-7 text-[12px]" onClick={handleOpenEditor}>
-            <Edit02Icon size={13} className="mr-1" />{t("edit-skill")}
-          </Button>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm" className="h-7 text-[12px]">
-                <SourceCodeIcon size={13} className="mr-1" />{t("open-in-editor")}
-                <ArrowDown01Icon size={11} className="ml-0.5 opacity-60" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start">
-              {editors.map((editor) => (
-                <DropdownMenuItem key={editor.id} onClick={() => handleOpenInSystemEditor(editor.id)} className="text-[12px] gap-2">
-                  <EditorIcon icon={editor.icon} iconBase64={editor.iconBase64} />
-                  {editor.name}
-                </DropdownMenuItem>
-              ))}
-              {editors.length === 0 && (
-                <DropdownMenuItem disabled className="text-[12px] text-muted-foreground">
-                  {t("no-editor-found")}
-                </DropdownMenuItem>
-              )}
-            </DropdownMenuContent>
-          </DropdownMenu>
-          {detail.source && (
-            <Button variant="outline" size="sm" className="h-7 text-[12px]" onClick={handleLoadDiff}>
-              <GitCompareIcon size={13} className="mr-1" />
-              {t("diff-preview")}
+          <div className="flex flex-wrap items-center gap-1.5 shrink-0 justify-end max-w-[360px]">
+            <Button variant="outline" size="sm" className={`h-7 text-[12px] ${isFavorite ? "text-amber-500 border-amber-500/40" : ""}`} onClick={async () => {
+              if (!skillName) return
+              const result = await ToggleFavorite(skillName)
+              setIsFavorite(result)
+            }}>
+              <FavouriteIcon size={13} className={`mr-1 ${isFavorite ? "fill-amber-500" : ""}`} />
+              {isFavorite ? t("remove-from-favorites") : t("add-to-favorites")}
             </Button>
-          )}
-          <Button variant="outline" size="sm" className="h-7 text-[12px]" onClick={() => setConfigDialogOpen(true)}>
-            <Settings02Icon size={13} className="mr-1" />
-            {t("config-agent-link")}
-          </Button>
-          <Button variant="outline" size="sm" className="h-7 text-[12px]" onClick={handleUpdate} disabled={updating}>
-            <RefreshIcon size={13} className={`mr-1 ${updating ? "animate-spin" : ""}`} />
-            {t("update")}
-          </Button>
-          <Button variant="outline" size="sm" className="h-7 text-[12px] text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => setShowDeleteDialog(true)}>
-            <Delete02Icon size={13} className="mr-1" />
-            {t("delete")}
-          </Button>
+            <Button variant="outline" size="sm" className="h-7 text-[12px]" onClick={handleOpenEditor}>
+              <Edit02Icon size={13} className="mr-1" />{t("edit-skill")}
+            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="h-7 text-[12px]">
+                  <SourceCodeIcon size={13} className="mr-1" />{t("open-in-editor")}
+                  <ArrowDown01Icon size={11} className="ml-0.5 opacity-60" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                {editors.map((editor) => (
+                  <DropdownMenuItem key={editor.id} onClick={() => handleOpenInSystemEditor(editor.id)} className="text-[12px] gap-2">
+                    <EditorIcon icon={editor.icon} iconBase64={editor.iconBase64} />
+                    {editor.name}
+                  </DropdownMenuItem>
+                ))}
+                {editors.length === 0 && (
+                  <DropdownMenuItem disabled className="text-[12px] text-muted-foreground">
+                    {t("no-editor-found")}
+                  </DropdownMenuItem>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+            {detail.source && (
+              <Button variant="outline" size="sm" className="h-7 text-[12px]" onClick={handleLoadDiff}>
+                <GitCompareIcon size={13} className="mr-1" />
+                {t("diff-preview")}
+              </Button>
+            )}
+            <Button variant="outline" size="sm" className="h-7 text-[12px]" onClick={() => setConfigDialogOpen(true)}>
+              <Settings02Icon size={13} className="mr-1" />
+              {t("config-agent-link")}
+            </Button>
+            <Button variant="outline" size="sm" className="h-7 text-[12px]" onClick={handleUpdate} disabled={updating}>
+              <RefreshIcon size={13} className={`mr-1 ${updating ? "animate-spin" : ""}`} />
+              {t("update")}
+            </Button>
+            <Button variant="outline" size="sm" className="h-7 text-[12px] text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => setShowDeleteDialog(true)}>
+              <Delete02Icon size={13} className="mr-1" />
+              {t("delete")}
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -409,17 +459,84 @@ const SkillDetailPage = () => {
             <p className="text-xs text-foreground/70 font-mono break-all">{detail.path}</p>
           </div>
 
-          {/* SKILL.md content */}
+          {/* Rating & Note */}
+          <div className="rounded-lg border border-border/50 p-3.5">
+            <div className="flex items-center gap-2 text-muted-foreground mb-2">
+              <StarIcon size={14} />
+              <span className="text-[11px] font-medium uppercase tracking-wide">{t("rating")}</span>
+            </div>
+            <div className="flex items-center gap-1 mb-2.5">
+              {[1, 2, 3, 4, 5].map(i => (
+                <button
+                  key={i}
+                  className="p-0.5 transition-transform hover:scale-110"
+                  onMouseEnter={() => setRatingHover(i)}
+                  onMouseLeave={() => setRatingHover(0)}
+                  onClick={() => handleSaveRating(i === rating ? 0 : i)}
+                >
+                  <StarIcon
+                    size={18}
+                    className={`transition-colors ${
+                      i <= (ratingHover || rating)
+                        ? "text-amber-500 fill-amber-500"
+                        : "text-muted-foreground/30"
+                    }`}
+                  />
+                </button>
+              ))}
+              {rating > 0 && <span className="text-[11px] text-muted-foreground ml-1">{rating}/5</span>}
+            </div>
+            <div className="flex gap-2">
+              <Input
+                className="h-8 text-[12px] flex-1"
+                placeholder={t("rating-note-placeholder")}
+                value={ratingNote}
+                onChange={(e) => setRatingNote(e.target.value)}
+                onBlur={handleSaveNote}
+                onKeyDown={(e) => e.key === "Enter" && handleSaveNote()}
+              />
+            </div>
+          </div>
+
+          {/* Skill files content with tabs */}
           <div className="rounded-lg border border-border/50 overflow-hidden">
+            {skillFiles.length > 1 && (
+              <div className="flex items-center gap-0 bg-muted/30 border-b border-border/50 overflow-x-auto">
+                {skillFiles.map((file) => (
+                  <button
+                    key={file.name}
+                    className={`px-4 py-2 text-[12px] font-medium transition-colors whitespace-nowrap border-b-2 ${
+                      activeFile === file.name
+                        ? "border-primary text-primary bg-background"
+                        : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                    }`}
+                    onClick={() => setActiveFile(file.name)}
+                  >
+                    {file.name}
+                    <span className="ml-1.5 text-[10px] text-muted-foreground/50">
+                      {file.size > 1024 ? `${(file.size / 1024).toFixed(1)}KB` : `${file.size}B`}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
             <div className="px-4 py-2.5 bg-muted/30 border-b border-border/50 flex items-center justify-between">
-              <span className="text-[12px] font-medium text-muted-foreground">SKILL.md</span>
+              <span className="text-[12px] font-medium text-muted-foreground">{activeFile}</span>
               <Button variant="ghost" size="sm" className="h-6 px-2 text-[11px] text-muted-foreground hover:text-foreground" onClick={handleOpenEditor}>
                 <Edit02Icon size={12} className="mr-1" />
                 {t("edit-skill")}
               </Button>
             </div>
             <div className="p-4 prose prose-sm dark:prose-invert max-w-none prose-headings:text-foreground/90 prose-p:text-foreground/75 prose-li:text-foreground/75 prose-code:text-primary prose-code:bg-primary/10 prose-code:rounded prose-code:px-1.5 prose-code:py-0.5 prose-code:text-[12px] prose-pre:bg-muted/50 prose-pre:border prose-pre:border-border/50 prose-a:text-primary prose-a:no-underline hover:prose-a:underline">
-              <Markdown>{markdownBody || t("no-description")}</Markdown>
+              <Markdown>{
+                (() => {
+                  const file = skillFiles.find(f => f.name === activeFile)
+                  if (file) {
+                    return renderMarkdownContent(file.content) || t("no-description")
+                  }
+                  return markdownBody || t("no-description")
+                })()
+              }</Markdown>
             </div>
           </div>
         </div>
@@ -465,7 +582,7 @@ const SkillDetailPage = () => {
 
       {/* Diff Preview dialog */}
       <Dialog open={showDiffDialog} onOpenChange={(open) => { setShowDiffDialog(open); if (!open) setDiffData(null) }}>
-        <DialogContent className="max-w-3xl max-h-[80vh] flex flex-col overflow-hidden">
+        <DialogContent className="max-w-4xl max-h-[80vh] flex flex-col overflow-hidden">
           <DialogHeader>
             <DialogTitle>{t("diff-preview")}</DialogTitle>
             <DialogDescription>{t("diff-preview-desc")}</DialogDescription>
@@ -477,18 +594,7 @@ const SkillDetailPage = () => {
             </div>
           ) : diffData ? (
             diffData.hasChanges ? (
-              <div className="flex-1 overflow-y-auto">
-                <div className="grid grid-cols-2 gap-0 border border-border/50 rounded overflow-hidden">
-                  <div>
-                    <div className="px-3 py-1.5 bg-red-500/10 border-b border-border/50 text-[11px] font-medium text-red-600 dark:text-red-400">{t("local-version")}</div>
-                    <pre className="p-3 text-[11px] font-mono text-foreground/70 overflow-x-auto whitespace-pre-wrap max-h-[50vh]">{diffData.localContent}</pre>
-                  </div>
-                  <div className="border-l border-border/50">
-                    <div className="px-3 py-1.5 bg-emerald-500/10 border-b border-border/50 text-[11px] font-medium text-emerald-600 dark:text-emerald-400">{t("remote-version")}</div>
-                    <pre className="p-3 text-[11px] font-mono text-foreground/70 overflow-x-auto whitespace-pre-wrap max-h-[50vh]">{diffData.remoteContent}</pre>
-                  </div>
-                </div>
-              </div>
+              <DiffView localContent={diffData.localContent} remoteContent={diffData.remoteContent} />
             ) : (
               <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-8 text-center">
                 <p className="text-sm font-medium text-emerald-600 dark:text-emerald-400">{t("no-changes")}</p>
@@ -497,6 +603,89 @@ const SkillDetailPage = () => {
           ) : null}
         </DialogContent>
       </Dialog>
+    </div>
+  )
+}
+
+// Side-by-side diff view with line-level highlighting
+type DiffLine = { lineNum: number; text: string; type: "equal" | "removed" | "added" }
+
+function DiffView({ localContent, remoteContent }: { localContent: string; remoteContent: string }) {
+  const { leftLines, rightLines } = useMemo(() => {
+    const changes = diffLines(localContent, remoteContent)
+    const left: DiffLine[] = []
+    const right: DiffLine[] = []
+    let oldNum = 1
+    let newNum = 1
+
+    for (const change of changes) {
+      const texts = change.value.replace(/\n$/, "").split("\n")
+      if (change.removed) {
+        for (const t of texts) {
+          left.push({ lineNum: oldNum++, text: t, type: "removed" })
+          right.push({ lineNum: -1, text: "", type: "removed" })
+        }
+      } else if (change.added) {
+        for (const t of texts) {
+          left.push({ lineNum: -1, text: "", type: "added" })
+          right.push({ lineNum: newNum++, text: t, type: "added" })
+        }
+      } else {
+        for (const t of texts) {
+          left.push({ lineNum: oldNum++, text: t, type: "equal" })
+          right.push({ lineNum: newNum++, text: t, type: "equal" })
+        }
+      }
+    }
+    return { leftLines: left, rightLines: right }
+  }, [localContent, remoteContent])
+
+  const DiffPanel = ({ lines, side }: { lines: DiffLine[]; side: "left" | "right" }) => (
+    <div className="flex-1 min-w-0 overflow-x-auto">
+      <table className="w-full text-[11px] font-mono border-collapse">
+        <tbody>
+          {lines.map((line, i) => {
+            const isEmpty = line.lineNum === -1
+            const isChanged = side === "left" ? line.type === "removed" : line.type === "added"
+            return (
+              <tr
+                key={i}
+                className={
+                  isChanged
+                    ? side === "left" ? "bg-red-500/10" : "bg-emerald-500/10"
+                    : isEmpty ? "bg-muted/30" : ""
+                }
+              >
+                <td className="select-none text-right px-1.5 py-0 text-muted-foreground/40 w-[1%] whitespace-nowrap text-[10px]">
+                  {isEmpty ? "" : line.lineNum}
+                </td>
+                <td className="px-2 py-0 whitespace-pre-wrap break-all">
+                  {isEmpty ? "" : line.text}
+                </td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+    </div>
+  )
+
+  return (
+    <div className="flex-1 overflow-y-auto">
+      <div className="grid grid-cols-2 gap-0 border border-border/50 rounded overflow-hidden">
+        <div className="flex flex-col min-w-0">
+          <div className="px-3 py-1.5 bg-red-500/10 border-b border-border/50 text-[11px] font-medium text-red-600 dark:text-red-400 sticky top-0 z-10">
+            Local
+          </div>
+          <DiffPanel lines={leftLines} side="left" />
+        </div>
+        <div className="flex flex-col min-w-0 border-l border-border/50">
+          <div className="px-3 py-1.5 bg-emerald-500/10 border-b border-border/50 text-[11px] font-medium text-emerald-600 dark:text-emerald-400 sticky top-0 z-10">
+            Remote
+          </div>
+          <DiffPanel lines={rightLines} side="right" />
+        </div>
+      </div>
     </div>
   )
 }

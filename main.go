@@ -22,6 +22,16 @@ func main() {
 	skillsService := services.NewSkillsService()
 	agentService := services.NewAgentService()
 	envService := services.NewEnvService()
+	
+	// Create new enhanced services
+	templateService := services.NewTemplateService()
+	recommendationService := services.NewRecommendationService(skillsService)
+	dependencyService := services.NewDependencyService(skillsService)
+	monitoringService := services.NewMonitoringService()
+	backupService := services.NewBackupService()
+	searchService := services.NewSearchService(skillsService)
+	profileService := services.NewProfileService(skillsService)
+	ratingService := services.NewRatingService()
 
 	// Create application with options
 	err := wails.Run(&options.App{
@@ -38,6 +48,16 @@ func main() {
 			skillsService.Startup(ctx)
 			agentService.Startup(ctx)
 			envService.Startup(ctx)
+			
+			// Startup new services
+			templateService.Startup(ctx)
+			recommendationService.Startup(ctx)
+			dependencyService.Startup(ctx)
+			monitoringService.Startup(ctx)
+			backupService.Startup(ctx)
+			searchService.Startup(ctx)
+			profileService.Startup(ctx)
+			ratingService.Startup(ctx)
 		},
 		Bind: []interface{}{
 			app,
@@ -45,6 +65,14 @@ func main() {
 			skillsService,
 			agentService,
 			envService,
+			templateService,
+			recommendationService,
+			dependencyService,
+			monitoringService,
+			backupService,
+			searchService,
+			profileService,
+			ratingService,
 		},
 		Debug: options.Debug{
 			OpenInspectorOnStartup: true,

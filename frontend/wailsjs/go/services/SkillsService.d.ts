@@ -9,6 +9,8 @@ export function AddCustomSource(arg1:string,arg2:string,arg3:string):Promise<voi
 
 export function BatchDeleteSkills(arg1:Array<string>):Promise<number>;
 
+export function BatchInstallFromRepo(arg1:Array<string>,arg2:Array<string>):Promise<number>;
+
 export function BatchUpdateSkillAgentLinks(arg1:Array<string>,arg2:Array<string>):Promise<number>;
 
 export function CheckSkillUpdates():Promise<Array<services.SkillUpdateInfo>>;
@@ -16,6 +18,8 @@ export function CheckSkillUpdates():Promise<Array<services.SkillUpdateInfo>>;
 export function ClearActivityLogs():Promise<void>;
 
 export function CloneProjectConfig(arg1:string,arg2:string):Promise<number>;
+
+export function CompareSkills(arg1:string,arg2:string):Promise<services.CompareResult>;
 
 export function CreateCollection(arg1:string,arg2:string,arg3:Array<string>):Promise<void>;
 
@@ -102,6 +106,8 @@ export function RunAutoUpdate():Promise<number>;
 export function SaveSettings(arg1:string):Promise<void>;
 
 export function SaveSkillContent(arg1:string,arg2:string):Promise<void>;
+
+export function ScanGitHubRepo(arg1:string):Promise<Array<services.GitHubRepoSkill>>;
 
 export function SearchCustomSource(arg1:string):Promise<Array<services.RemoteSkill>>;
 

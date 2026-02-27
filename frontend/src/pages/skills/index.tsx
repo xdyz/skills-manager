@@ -75,8 +75,7 @@ const SkillsPage = () => {
   useEffect(() => {
     // 安全超时：如果 10 秒后仍在 loading，强制结束
     const timer = setTimeout(() => {
-      setLoading(prev => {
-        if (prev) console.warn("Skills page loading timeout, forcing stop")
+      setLoading(_prev => {
         return false
       })
     }, 10000)
@@ -128,15 +127,12 @@ const SkillsPage = () => {
   const loadLocalSkills = async (showLoading = true) => {
     try {
       if (showLoading) setLoading(true)
-      console.log("[Skills] Calling GetAllAgentSkills...")
       const result = await GetAllAgentSkills()
-      console.log("[Skills] Got result:", result?.length, "skills")
       setLocalSkills(result || [])
-    } catch (error: any) {
+    } catch (error) {
       console.error("[Skills] Failed to load local skills:", error)
       // 如果是 wails runtime 未就绪，延迟重试
-      if (error?.message?.includes("not a function") || error instanceof TypeError) {
-        console.log("[Skills] Wails runtime may not be ready, retrying in 1s...")
+      if (error instanceof TypeError) {
         await new Promise(r => setTimeout(r, 1000))
         try {
           const result = await GetAllAgentSkills()
@@ -148,7 +144,6 @@ const SkillsPage = () => {
       }
       toast({ title: t("toast-install-failed", { error: String(error) }), variant: "destructive" })
     } finally {
-      console.log("[Skills] Setting loading to false")
       setLoading(false)
     }
   }

@@ -3,19 +3,24 @@ import { useTranslation } from "react-i18next"
 import { Switch } from "@/components/ui/switch"
 import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { toast } from "@/components/ui/use-toast"
 import {
   Moon02Icon,
   Sun03Icon,
   RefreshIcon,
   Folder01Icon,
+  ComputerIcon,
+  Download04Icon,
 } from "hugeicons-react"
 import { GetSettings, SaveSettings } from "@wailsjs/go/services/SkillsService"
 import { GetSupportedAgents } from "@wailsjs/go/services/AgentService"
 import type { AgentInfo } from "@/types"
+import BackupPage from "../backup"
 
 const SettingsPage = () => {
   const { t, i18n } = useTranslation()
+  const [activeTab, setActiveTab] = useState<"settings" | "backup">("settings")
   const [loading, setLoading] = useState(true)
   const [allAgents, setAllAgents] = useState<AgentInfo[]>([])
 
@@ -78,7 +83,8 @@ const SettingsPage = () => {
     if (!initialLoadDone.current) return
 
     // 即时应用主题
-    document.documentElement.classList.toggle("dark", theme === "dark")
+    const isDark = theme === "system" ? window.matchMedia("(prefers-color-scheme: dark)").matches : theme === "dark"
+    document.documentElement.classList.toggle("dark", isDark)
     localStorage.setItem("theme", theme)
 
     // 即时应用语言
@@ -106,13 +112,27 @@ const SettingsPage = () => {
 
   return (
     <div className="flex flex-col h-full w-full">
-      <div className="shrink-0 px-6 pt-6 pb-4 border-b border-border/50">
+      <div className="shrink-0 px-6 pt-5 pb-0 border-b border-border/50">
         <div className="space-y-1">
           <h1 className="text-lg font-semibold tracking-tight text-foreground/90">{t("settings")}</h1>
           <p className="text-[13px] text-muted-foreground">{t("settings-desc")}</p>
         </div>
+        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "settings" | "backup")} className="mt-3">
+          <TabsList className="h-9">
+            <TabsTrigger value="settings" className="text-[12px] gap-1.5">
+              {t("settings")}
+            </TabsTrigger>
+            <TabsTrigger value="backup" className="text-[12px] gap-1.5">
+              <Download04Icon size={13} />
+              {t("backup-nav")}
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
       </div>
 
+      {activeTab === "backup" ? (
+        <BackupPage />
+      ) : (
       <div className="flex-1 overflow-y-auto p-6">
         <div className="max-w-2xl mx-auto space-y-8">
           {/* Appearance */}
@@ -123,7 +143,7 @@ const SettingsPage = () => {
               {/* Theme */}
               <div className="flex items-center justify-between p-4">
                 <div className="flex items-center gap-3">
-                  {theme === "dark" ? <Moon02Icon size={16} className="text-muted-foreground" /> : <Sun03Icon size={16} className="text-muted-foreground" />}
+                  {theme === "system" ? <ComputerIcon size={16} className="text-muted-foreground" /> : theme === "dark" ? <Moon02Icon size={16} className="text-muted-foreground" /> : <Sun03Icon size={16} className="text-muted-foreground" />}
                   <span className="text-[13px]">{t("theme-setting")}</span>
                 </div>
                 <div className="flex items-center gap-2">
@@ -138,6 +158,12 @@ const SettingsPage = () => {
                     onClick={() => setTheme("dark")}
                   >
                     {t("theme-dark")}
+                  </button>
+                  <button
+                    className={`px-3 py-1.5 rounded text-[12px] transition-colors ${theme === "system" ? "bg-primary/10 text-primary font-medium" : "bg-muted/60 text-muted-foreground hover:text-foreground"}`}
+                    onClick={() => setTheme("system")}
+                  >
+                    {t("theme-system")}
                   </button>
                 </div>
               </div>
@@ -269,6 +295,7 @@ const SettingsPage = () => {
           </section>
         </div>
       </div>
+      )}
     </div>
   )
 }

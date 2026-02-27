@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next"
 import routes from "./routes"
 import SetupPage from "./pages/setup"
 import Logo from "./components/Logo"
+import ErrorBoundary from "./components/ErrorBoundary"
 import { RefreshEnv } from "@wailsjs/go/services/EnvService"
 
 interface EnvStatus {
@@ -75,7 +76,11 @@ const App = () => {
     return <SetupPage envStatus={envStatus} onEnvReady={() => setEnvReady(true)} />
   }
 
-  return <RouterProvider router={routes} />
+  return (
+    <ErrorBoundary>
+      <RouterProvider router={routes} />
+    </ErrorBoundary>
+  )
 }
 
 export default App

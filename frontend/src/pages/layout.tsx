@@ -33,6 +33,7 @@ import CommandPalette from "@/components/CommandPalette"
 import CreateSkillDialog from "@/components/CreateSkillDialog"
 import HealthCheckDialog from "@/components/HealthCheckDialog"
 import CustomSourcesDialog from "@/components/CustomSourcesDialog"
+import KeyboardShortcutsDialog from "@/components/KeyboardShortcutsDialog"
 import NotificationCenter, { type Notification } from "@/components/NotificationCenter"
 import {
   Home01Icon, 
@@ -52,6 +53,9 @@ import {
   Globe02Icon,
   Settings02Icon,
   Folder01Icon,
+  Store01Icon,
+  GitBranchIcon,
+  ComputerIcon,
 } from "hugeicons-react"
 import { useState, useEffect, useRef, useCallback } from "react"
 import { SelectFolder, GetFolders, RemoveFolder } from "@wailsjs/go/services/FolderService"
@@ -61,7 +65,7 @@ const PageLayout = () => {
   const navigate = useNavigate()
   const location = useLocation()
   const { t, i18n } = useTranslation()
-  const [theme, setTheme] = useState<"light" | "dark">("light")
+  const [theme, setTheme] = useState<"light" | "dark" | "system">("light")
   const [folders, setFolders] = useState<string[]>([])
   const [selectedFolder, setSelectedFolder] = useState<string | null>(null)
   const [folderToRemove, setFolderToRemove] = useState<string | null>(null)
@@ -74,6 +78,7 @@ const PageLayout = () => {
   const [createSkillOpen, setCreateSkillOpen] = useState(false)
   const [healthCheckOpen, setHealthCheckOpen] = useState(false)
   const [customSourcesOpen, setCustomSourcesOpen] = useState(false)
+  const [keyboardShortcutsOpen, setKeyboardShortcutsOpen] = useState(false)
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [autoUpdateEnabled, setAutoUpdateEnabled] = useState(false)
   const addNotification = useCallback((type: Notification["type"], title: string, message?: string) => {
@@ -100,30 +105,42 @@ const PageLayout = () => {
     GetSettings().then(s => {
       if (s) {
         const t = s.theme || "light"
-        setTheme(t as "light" | "dark")
-        document.documentElement.classList.toggle("dark", t === "dark")
+        setTheme(t as "light" | "dark" | "system")
+        const isDark = t === "system" ? window.matchMedia("(prefers-color-scheme: dark)").matches : t === "dark"
+        document.documentElement.classList.toggle("dark", isDark)
         localStorage.setItem("theme", t)
         if (s.language && i18n.language !== s.language) {
           i18n.changeLanguage(s.language)
         }
       }
     }).catch(() => {
-      // 回退到 localStorage
-      const savedTheme = localStorage.getItem("theme") as "light" | "dark" | null
+      const savedTheme = localStorage.getItem("theme") as "light" | "dark" | "system" | null
       if (savedTheme) {
         setTheme(savedTheme)
-        document.documentElement.classList.toggle("dark", savedTheme === "dark")
+        const isDark = savedTheme === "system" ? window.matchMedia("(prefers-color-scheme: dark)").matches : savedTheme === "dark"
+        document.documentElement.classList.toggle("dark", isDark)
       }
     })
     loadFolders()
   }, [])
 
-  // Load auto-update config
+  // Load auto-update config & run auto-update if needed
   useEffect(() => {
     GetAutoUpdateConfig().then(config => {
       setAutoUpdateEnabled(config?.enabled || false)
+      if (config?.enabled) {
+        const lastCheck = config.lastCheck ? new Date(config.lastCheck).getTime() : 0
+        const intervalMs = (config.intervalHours || 24) * 3600000
+        if (Date.now() - lastCheck > intervalMs) {
+          RunAutoUpdate().then(count => {
+            if (count > 0) {
+              addNotification("success", t("toast-auto-update-result", { count }))
+            }
+          }).catch(() => {})
+        }
+      }
     }).catch(() => {})
-  }, [])
+  }, [addNotification, t])
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -142,23 +159,6 @@ const PageLayout = () => {
     window.addEventListener("keydown", handleKeyDown)
     return () => window.removeEventListener("keydown", handleKeyDown)
   }, [navigate])
-
-  // Auto-update check on startup
-  useEffect(() => {
-    GetAutoUpdateConfig().then(config => {
-      if (config?.enabled) {
-        const lastCheck = config.lastCheck ? new Date(config.lastCheck).getTime() : 0
-        const intervalMs = (config.intervalHours || 24) * 3600000
-        if (Date.now() - lastCheck > intervalMs) {
-          RunAutoUpdate().then(count => {
-            if (count > 0) {
-              addNotification("success", t("toast-auto-update-result", { count }))
-            }
-          }).catch(() => {})
-        }
-      }
-    }).catch(() => {})
-  }, [addNotification, t])
 
   // Refresh folders on window focus
   useEffect(() => {
@@ -226,12 +226,25 @@ const PageLayout = () => {
     }
   }
 
+  // Listen for system theme changes when in "system" mode
+  useEffect(() => {
+    if (theme !== "system") return
+    const mq = window.matchMedia("(prefers-color-scheme: dark)")
+    const handler = (e: MediaQueryListEvent) => {
+      document.documentElement.classList.toggle("dark", e.matches)
+    }
+    mq.addEventListener("change", handler)
+    return () => mq.removeEventListener("change", handler)
+  }, [theme])
+
   const toggleTheme = async () => {
-    const newTheme = theme === "light" ? "dark" : "light"
+    const cycle: Array<"light" | "dark" | "system"> = ["light", "dark", "system"]
+    const nextIdx = (cycle.indexOf(theme) + 1) % cycle.length
+    const newTheme = cycle[nextIdx]
     setTheme(newTheme)
     localStorage.setItem("theme", newTheme)
-    document.documentElement.classList.toggle("dark", newTheme === "dark")
-    // 同步保存到后端设置
+    const isDark = newTheme === "system" ? window.matchMedia("(prefers-color-scheme: dark)").matches : newTheme === "dark"
+    document.documentElement.classList.toggle("dark", isDark)
     try {
       const s = await GetSettings()
       if (s) await SaveSettings(JSON.stringify({ ...s, theme: newTheme }))
@@ -326,13 +339,14 @@ const PageLayout = () => {
       case "custom-sources":
         setCustomSourcesOpen(true)
         break
+      case "keyboard-shortcuts":
+        setKeyboardShortcutsOpen(true)
+        break
     }
   }, [t, addNotification])
 
   const isActive = (path: string) => {
     if (path === "/skills") return location.pathname === "/skills" || location.pathname.startsWith("/skills/")
-    if (path === "/collections") return location.pathname === "/collections"
-    if (path === "/settings") return location.pathname === "/settings"
     return location.pathname === path || (path === "/home" && location.pathname === "/")
   }
 
@@ -393,8 +407,8 @@ const PageLayout = () => {
             >
               {i18n.language === "zh" ? "EN" : "ZH"}
             </Button>
-            <Button variant="ghost" size="icon" className="h-7 w-7 rounded text-muted-foreground hover:text-foreground" onClick={toggleTheme}>
-              {theme === "light" ? <Moon02Icon size={15} /> : <Sun03Icon size={15} />}
+            <Button variant="ghost" size="icon" className="h-7 w-7 rounded text-muted-foreground hover:text-foreground" onClick={toggleTheme} title={theme === "system" ? t("theme-system") : theme === "dark" ? t("theme-dark") : t("theme-light")}>
+              {theme === "system" ? <ComputerIcon size={15} /> : theme === "light" ? <Moon02Icon size={15} /> : <Sun03Icon size={15} />}
             </Button>
           </div>
         </div>
@@ -436,6 +450,27 @@ const PageLayout = () => {
               <Folder01Icon size={15} />
               {t("collections")}
             </Button>
+
+            <div className="h-px bg-border/50 my-1.5" />
+
+            <Button
+              variant={isActive("/discover") ? "secondary" : "ghost"}
+              className={`justify-start gap-2.5 h-8 text-[13px] rounded ${isActive("/discover") ? "bg-primary/10 text-primary font-medium" : "text-muted-foreground hover:text-foreground"}`}
+              onClick={() => navigate("/discover")}
+            >
+              <Store01Icon size={15} />
+              {t("discover-title")}
+            </Button>
+            <Button
+              variant={isActive("/analysis") ? "secondary" : "ghost"}
+              className={`justify-start gap-2.5 h-8 text-[13px] rounded ${isActive("/analysis") ? "bg-primary/10 text-primary font-medium" : "text-muted-foreground hover:text-foreground"}`}
+              onClick={() => navigate("/analysis")}
+            >
+              <GitBranchIcon size={15} />
+              {t("analysis-title")}
+            </Button>
+
+            <div className="h-px bg-border/50 my-1.5" />
 
             <Button
               variant={isActive("/settings") ? "secondary" : "ghost"}
@@ -588,6 +623,7 @@ const PageLayout = () => {
       <CreateSkillDialog open={createSkillOpen} onOpenChange={setCreateSkillOpen} />
       <HealthCheckDialog open={healthCheckOpen} onOpenChange={setHealthCheckOpen} />
       <CustomSourcesDialog open={customSourcesOpen} onOpenChange={setCustomSourcesOpen} />
+      <KeyboardShortcutsDialog open={keyboardShortcutsOpen} onOpenChange={setKeyboardShortcutsOpen} />
       <Toaster />
     </div>
   )

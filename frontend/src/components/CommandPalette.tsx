@@ -18,7 +18,9 @@ import {
   ArrowUp02Icon,
   Globe02Icon,
   Settings02Icon,
-  Clock01Icon,
+  Store01Icon,
+  GitBranchIcon,
+  KeyboardIcon,
 } from "hugeicons-react"
 import { GetAllAgentSkills } from "@wailsjs/go/services/SkillsService"
 import { GetSupportedAgents } from "@wailsjs/go/services/AgentService"
@@ -54,19 +56,21 @@ const CommandPalette = ({ open, onOpenChange, onAction }: CommandPaletteProps) =
     { id: "go-skills", label: t("command-go-skills"), icon: ChartHistogramIcon, group: t("command-actions"), action: () => navigate("/skills") },
     { id: "go-agents", label: t("command-go-agents"), icon: AiChat02Icon, group: t("command-actions"), action: () => navigate("/agents") },
     { id: "go-projects", label: t("command-go-projects"), icon: Folder01Icon, group: t("command-actions"), action: () => navigate("/projects") },
+    { id: "go-collections", label: t("collections"), icon: Folder01Icon, group: t("command-actions"), action: () => navigate("/collections") },
+    { id: "go-discover", label: t("discover-title"), icon: Store01Icon, group: t("command-actions"), action: () => navigate("/discover") },
+    { id: "go-analysis", label: t("analysis-title"), icon: GitBranchIcon, group: t("command-actions"), action: () => navigate("/analysis") },
+    { id: "go-settings", label: t("shortcut-go-settings"), icon: Settings02Icon, group: t("command-actions"), action: () => navigate("/settings") },
     { id: "install-skill", label: t("command-install-skill"), icon: Add01Icon, group: t("command-actions"), action: () => { navigate("/skills?action=install"); } },
     { id: "create-skill", label: t("command-create-skill"), icon: Add01Icon, group: t("command-actions"), action: () => onAction?.("create-skill") },
     { id: "health-check", label: t("command-health-check"), icon: Stethoscope02Icon, group: t("command-actions"), action: () => onAction?.("health-check") },
     { id: "check-updates", label: t("command-check-updates"), icon: ArrowUp02Icon, group: t("command-actions"), action: () => onAction?.("check-updates") },
     { id: "custom-sources", label: t("custom-sources"), icon: Globe02Icon, group: t("command-actions"), action: () => onAction?.("custom-sources") },
-    { id: "go-settings", label: t("shortcut-go-settings"), icon: Settings02Icon, group: t("command-actions"), action: () => navigate("/settings") },
-    { id: "go-activity", label: t("activity-log"), icon: Clock01Icon, group: t("command-actions"), action: () => navigate("/activity") },
-    { id: "go-collections", label: t("collections"), icon: Folder01Icon, group: t("command-actions"), action: () => navigate("/collections") },
+    { id: "keyboard-shortcuts", label: t("keyboard-shortcuts"), icon: KeyboardIcon, group: t("command-actions"), action: () => onAction?.("keyboard-shortcuts") },
   ], [t, navigate, onAction])
 
   const filteredItems = useMemo(() => {
     const q = query.toLowerCase().trim()
-    const items: Array<{ id: string; label: string; sublabel?: string; icon: any; group: string; action: () => void }> = []
+    const items: Array<{ id: string; label: string; sublabel?: string; icon: React.ElementType; group: string; action: () => void }> = []
 
     // Skills
     const filteredSkills = skills.filter(s => !q || s.name?.toLowerCase().includes(q) || s.desc?.toLowerCase().includes(q))
