@@ -138,89 +138,105 @@ func (ss *SkillsService) GetAllAgentSkills() ([]Skills, error) {
 		return nil, err
 	}
 
+	// 只扫描 ~/.agents/skills/ 中央目录
+	centralSkillsDir := filepath.Join(homeDir, ".agents", "skills")
 
 	// 读取 .skills-lock 获取来源信息
-	centralSkillsDir := filepath.Join(homeDir, ".agents", "skills")
 	lockPath := filepath.Join(centralSkillsDir, ".skills-lock")
 	var lock SkillsLock
 	if data, err := os.ReadFile(lockPath); err == nil {
 		lock, _ = unmarshalSkillsLock(data)
 	}
 
-	// 2. 使用 map 去重，key 是 skill 名称
-	skillsMap := make(map[string]*Skills)
+	// 2. 检查中央目录是否存在
+	if _, err := os.Stat(centralSkillsDir); os.IsNotExist(err) {
+		return []Skills{}, nil
+	}
 
-	// 3. 遍历所有支持的 agent 目录
-	for _, agent := range getAllAgentConfigs() {
-		agentSkillsDir := filepath.Join(homeDir, agent.GlobalPath)
+	// 3. 读取中央目录下的所有 skill
+	entries, err := os.ReadDir(centralSkillsDir)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read skills directory: %v", err)
+	}
 
-		// 检查目录是否存在
-		if _, err := os.Stat(agentSkillsDir); os.IsNotExist(err) {
-			continue // 该 agent 目录不存在，跳过
+	// 预构建 agent 链接检测表：agentName -> []agentSkillsDir
+	allConfigs := getAllAgentConfigs()
+	type agentDir struct {
+		name string
+		dir  string
+	}
+	var agentDirs []agentDir
+	for _, agent := range allConfigs {
+		for _, gp := range agent.GlobalPaths {
+			d := filepath.Join(homeDir, gp)
+			if d == centralSkillsDir {
+				continue // 跳过中央目录本身
+			}
+			agentDirs = append(agentDirs, agentDir{name: agent.Name, dir: d})
+		}
+	}
+
+	var skills []Skills
+	for _, entry := range entries {
+		skillName := entry.Name()
+
+		// 跳过隐藏文件
+		if strings.HasPrefix(skillName, ".") {
+			continue
 		}
 
+		skillPath := filepath.Join(centralSkillsDir, skillName)
 
-		// 读取该 agent 目录下的所有 skill
-		entries, err := os.ReadDir(agentSkillsDir)
+		// 检查是否是目录
+		info, err := os.Stat(skillPath)
+		if err != nil || !info.IsDir() {
+			continue
+		}
+
+		// 读取 SKILL.md
+		skillMdPath := filepath.Join(skillPath, "SKILL.md")
+		content, err := os.ReadFile(skillMdPath)
 		if err != nil {
-			continue // 读取失败，跳过
+			continue // 没有 SKILL.md，跳过
 		}
 
-		// 遍历每个 skill 文件夹
-		for _, entry := range entries {
-			skillName := entry.Name()
+		skill := parseSkillMd(string(content), skillPath)
+		if skill.Name == "" {
+			skill.Name = skillName
+		}
 
-			// 跳过隐藏文件
-			if strings.HasPrefix(skillName, ".") {
+		// 检测该 skill 被哪些 agent 链接
+		linkedAgents := []string{}
+		seen := make(map[string]bool)
+		for _, ad := range agentDirs {
+			if seen[ad.name] {
 				continue
 			}
-
-			skillPath := filepath.Join(agentSkillsDir, skillName)
-
-			// 检查是否是目录或软链接（软链接也需要处理）
-			info, err := os.Stat(skillPath)
-			if err != nil {
-				continue
-			}
-			if !info.IsDir() {
-				continue
-			}
-
-			// 读取 SKILL.md（只支持新格式）
-			skillMdPath := filepath.Join(skillPath, "SKILL.md")
-			content, err := os.ReadFile(skillMdPath)
-			if err != nil {
-				continue // 没有 SKILL.md，跳过
-			}
-
-
-			// 如果这个 skill 已经存在，只添加 agent 名称
-			if existingSkill, exists := skillsMap[skillName]; exists {
-				existingSkill.Agents = append(existingSkill.Agents, agent.Name)
-			} else {
-				// 新 skill，解析并添加
-				skill := parseSkillMd(string(content), skillPath)
-				if skill.Name == "" {
-					skill.Name = skillName // 如果 YAML 中没有 name，使用目录名
-				}
-				skill.Agents = []string{agent.Name}
-				// 从 .skills-lock 填充 source
-				if lock.Skills != nil {
-					if entry, ok := lock.Skills[skillName]; ok {
-						skill.Source = entry.Source
+			linkPath := filepath.Join(ad.dir, skillName)
+			if lstat, err := os.Lstat(linkPath); err == nil && lstat.Mode()&os.ModeSymlink != 0 {
+				if target, err := os.Readlink(linkPath); err == nil {
+					absTarget := target
+					if !filepath.IsAbs(target) {
+						absTarget = filepath.Clean(filepath.Join(filepath.Dir(linkPath), target))
+					}
+					if absTarget == skillPath {
+						linkedAgents = append(linkedAgents, ad.name)
+						seen[ad.name] = true
 					}
 				}
-				skillsMap[skillName] = &skill
 			}
 		}
-	}
+		skill.Agents = linkedAgents
 
-	// 4. 将 map 转换为 slice
-	var skills []Skills
-	for _, skill := range skillsMap {
-		skills = append(skills, *skill)
-	}
+		// 从 .skills-lock 填充 source
+		if lock.Skills != nil {
+			if entry, ok := lock.Skills[skillName]; ok {
+				skill.Source = entry.Source
+			}
+		}
 
+		skills = append(skills, skill)
+	}
 
 	return skills, nil
 }
@@ -910,44 +926,45 @@ func (ss *SkillsService) createSymlinksForSkill(skillName string, sourcePath str
 	successCount := 0
 	errorCount := 0
 
+	centralSkillsDir := filepath.Join(homeDir, ".agents", "skills")
+
 	for _, agent := range getAllAgentConfigs() {
 		// 如果指定了 agents 列表，只安装到指定的 agents
 		if len(agentSet) > 0 && !agentSet[agent.Name] {
 			continue
 		}
 
-		agentSkillsDir := filepath.Join(homeDir, agent.GlobalPath)
+		// 在所有全局路径中创建链接
+		for _, gp := range agent.GlobalPaths {
+			agentSkillsDir := filepath.Join(homeDir, gp)
 
-		// 跳过中央目录本身
-		centralSkillsDir := filepath.Join(homeDir, ".agents", "skills")
-		if agentSkillsDir == centralSkillsDir {
-			continue
-		}
-
-		// 确保 agent 目录存在
-		if err := os.MkdirAll(agentSkillsDir, 0755); err != nil {
-			continue
-		}
-
-		// 创建软链接
-		linkPath := filepath.Join(agentSkillsDir, skillName)
-
-		// 如果链接或文件已存在，先删除
-		if stat, err := os.Lstat(linkPath); err == nil {
-			if stat.Mode()&os.ModeSymlink != 0 {
-				// 是软链接
-				os.Remove(linkPath)
-			} else {
-				// 是实际目录，不删除
+			// 跳过中央目录本身
+			if agentSkillsDir == centralSkillsDir {
 				continue
 			}
-		}
 
-		// 创建软链接
-		if err := os.Symlink(sourcePath, linkPath); err != nil {
-			errorCount++
-		} else {
-			successCount++
+			// 确保 agent 目录存在
+			if err := os.MkdirAll(agentSkillsDir, 0755); err != nil {
+				continue
+			}
+
+			// 创建软链接
+			linkPath := filepath.Join(agentSkillsDir, skillName)
+
+			// 如果链接或文件已存在，先删除
+			if stat, err := os.Lstat(linkPath); err == nil {
+				if stat.Mode()&os.ModeSymlink != 0 {
+					os.Remove(linkPath)
+				} else {
+					continue
+				}
+			}
+
+			if err := os.Symlink(sourcePath, linkPath); err != nil {
+				errorCount++
+			} else {
+				successCount++
+			}
 		}
 	}
 
@@ -971,28 +988,35 @@ func (ss *SkillsService) GetSkillAgentLinks(skillName string) ([]string, error) 
 
 	var linkedAgents []string
 	for _, agent := range getAllAgentConfigs() {
-		agentSkillsDir := filepath.Join(homeDir, agent.GlobalPath)
-		if agentSkillsDir == centralSkillsDir {
-			continue
-		}
+		found := false
+		for _, gp := range agent.GlobalPaths {
+			agentSkillsDir := filepath.Join(homeDir, gp)
+			if agentSkillsDir == centralSkillsDir {
+				continue
+			}
 
-		linkPath := filepath.Join(agentSkillsDir, skillName)
-		if stat, err := os.Lstat(linkPath); err == nil {
-			if stat.Mode()&os.ModeSymlink != 0 {
-				// 确认软链接指向的是这个 skill
-				if target, err := os.Readlink(linkPath); err == nil {
-					// 处理相对路径：将相对路径转换为绝对路径
-					absTarget := target
-					if !filepath.IsAbs(target) {
-						absTarget = filepath.Join(agentSkillsDir, target)
-					}
-					// Clean 路径以消除 .. 等
-					absTarget = filepath.Clean(absTarget)
-					if absTarget == skillSourcePath {
-						linkedAgents = append(linkedAgents, agent.Name)
+			linkPath := filepath.Join(agentSkillsDir, skillName)
+			if stat, err := os.Lstat(linkPath); err == nil {
+				if stat.Mode()&os.ModeSymlink != 0 {
+					// 确认软链接指向的是这个 skill
+					if target, err := os.Readlink(linkPath); err == nil {
+						// 处理相对路径：将相对路径转换为绝对路径
+						absTarget := target
+						if !filepath.IsAbs(target) {
+							absTarget = filepath.Join(agentSkillsDir, target)
+						}
+						// Clean 路径以消除 .. 等
+						absTarget = filepath.Clean(absTarget)
+						if absTarget == skillSourcePath {
+							found = true
+							break
+						}
 					}
 				}
 			}
+		}
+		if found {
+			linkedAgents = append(linkedAgents, agent.Name)
 		}
 	}
 
@@ -1025,36 +1049,40 @@ func (ss *SkillsService) UpdateSkillAgentLinks(skillName string, agents []string
 	removedCount := 0
 
 	for _, agent := range getAllAgentConfigs() {
-		agentSkillsDir := filepath.Join(homeDir, agent.GlobalPath)
-		if agentSkillsDir == centralSkillsDir {
-			continue
-		}
-
-		linkPath := filepath.Join(agentSkillsDir, skillName)
-		linkExists := false
-
-		if stat, err := os.Lstat(linkPath); err == nil {
-			if stat.Mode()&os.ModeSymlink != 0 {
-				linkExists = true
-			}
-		}
-
 		shouldExist := agentSet[agent.Name]
 
-		if shouldExist && !linkExists {
-			// 需要创建软链接
-			if err := os.MkdirAll(agentSkillsDir, 0755); err != nil {
+		for _, gp := range agent.GlobalPaths {
+			agentSkillsDir := filepath.Join(homeDir, gp)
+			if agentSkillsDir == centralSkillsDir {
 				continue
 			}
-			if err := os.Symlink(skillSourcePath, linkPath); err != nil {
+			linkPath := filepath.Join(agentSkillsDir, skillName)
+
+			if shouldExist {
+				// 在所有全局路径中创建链接
+				linkExists := false
+				if stat, err := os.Lstat(linkPath); err == nil {
+					if stat.Mode()&os.ModeSymlink != 0 {
+						linkExists = true
+					}
+				}
+				if !linkExists {
+					if err := os.MkdirAll(agentSkillsDir, 0755); err != nil {
+						continue
+					}
+					if err := os.Symlink(skillSourcePath, linkPath); err == nil {
+						addedCount++
+					}
+				}
 			} else {
-				addedCount++
-			}
-		} else if !shouldExist && linkExists {
-			// 需要删除软链接
-			if err := os.Remove(linkPath); err != nil {
-			} else {
-				removedCount++
+				// 从所有全局路径中删除链接
+				if stat, err := os.Lstat(linkPath); err == nil {
+					if stat.Mode()&os.ModeSymlink != 0 {
+						if err := os.Remove(linkPath); err == nil {
+							removedCount++
+						}
+					}
+				}
 			}
 		}
 	}
@@ -1188,17 +1216,19 @@ func (ss *SkillsService) DeleteSkill(skillName string) error {
 	// 1. 删除所有 agent 目录中的软链接
 	deletedLinks := 0
 	for _, agent := range getAllAgentConfigs() {
-		agentSkillsDir := filepath.Join(homeDir, agent.GlobalPath)
-		if agentSkillsDir == centralSkillsDir {
-			continue
-		}
+		for _, gp := range agent.GlobalPaths {
+			agentSkillsDir := filepath.Join(homeDir, gp)
+			if agentSkillsDir == centralSkillsDir {
+				continue
+			}
 
-		linkPath := filepath.Join(agentSkillsDir, skillName)
-		if stat, err := os.Lstat(linkPath); err == nil {
-			if stat.Mode()&os.ModeSymlink != 0 {
-				// 是软链接，删除
-				if err := os.Remove(linkPath); err == nil {
-					deletedLinks++
+			linkPath := filepath.Join(agentSkillsDir, skillName)
+			if stat, err := os.Lstat(linkPath); err == nil {
+				if stat.Mode()&os.ModeSymlink != 0 {
+					// 是软链接，删除
+					if err := os.Remove(linkPath); err == nil {
+						deletedLinks++
+					}
 				}
 			}
 		}
@@ -1987,71 +2017,73 @@ func (ss *SkillsService) HealthCheck() (*HealthCheckResult, error) {
 	skillLinkCount := make(map[string]int)
 
 	for _, agent := range getAllAgentConfigs() {
-		agentSkillsDir := filepath.Join(homeDir, agent.GlobalPath)
-		if agentSkillsDir == centralSkillsDir {
-			continue
-		}
-
-		if _, err := os.Stat(agentSkillsDir); os.IsNotExist(err) {
-			continue
-		}
-
-		entries, err := os.ReadDir(agentSkillsDir)
-		if err != nil {
-			continue
-		}
-
-		for _, entry := range entries {
-			name := entry.Name()
-			if strings.HasPrefix(name, ".") {
+		for _, gp := range agent.GlobalPaths {
+			agentSkillsDir := filepath.Join(homeDir, gp)
+			if agentSkillsDir == centralSkillsDir {
 				continue
 			}
-			fullPath := filepath.Join(agentSkillsDir, name)
 
-			// 检查是否是软链接
-			lstat, err := os.Lstat(fullPath)
+			if _, err := os.Stat(agentSkillsDir); os.IsNotExist(err) {
+				continue
+			}
+
+			entries, err := os.ReadDir(agentSkillsDir)
 			if err != nil {
 				continue
 			}
 
-			if lstat.Mode()&os.ModeSymlink != 0 {
-				result.TotalLinks++
-				// 检查软链接是否有效
-				target, err := os.Readlink(fullPath)
+			for _, entry := range entries {
+				name := entry.Name()
+				if strings.HasPrefix(name, ".") {
+					continue
+				}
+				fullPath := filepath.Join(agentSkillsDir, name)
+
+				// 检查是否是软链接
+				lstat, err := os.Lstat(fullPath)
 				if err != nil {
-					result.BrokenLinks = append(result.BrokenLinks, BrokenLink{
-						AgentName: agent.Name,
-						SkillName: name,
-						LinkPath:  fullPath,
-						Error:     fmt.Sprintf("cannot read link: %v", err),
-					})
 					continue
 				}
 
-				absTarget := target
-				if !filepath.IsAbs(target) {
-					absTarget = filepath.Clean(filepath.Join(agentSkillsDir, target))
-				}
+				if lstat.Mode()&os.ModeSymlink != 0 {
+					result.TotalLinks++
+					// 检查软链接是否有效
+					target, err := os.Readlink(fullPath)
+					if err != nil {
+						result.BrokenLinks = append(result.BrokenLinks, BrokenLink{
+							AgentName: agent.Name,
+							SkillName: name,
+							LinkPath:  fullPath,
+							Error:     fmt.Sprintf("cannot read link: %v", err),
+						})
+						continue
+					}
 
-				if _, err := os.Stat(absTarget); os.IsNotExist(err) {
-					result.BrokenLinks = append(result.BrokenLinks, BrokenLink{
+					absTarget := target
+					if !filepath.IsAbs(target) {
+						absTarget = filepath.Clean(filepath.Join(agentSkillsDir, target))
+					}
+
+					if _, err := os.Stat(absTarget); os.IsNotExist(err) {
+						result.BrokenLinks = append(result.BrokenLinks, BrokenLink{
+							AgentName: agent.Name,
+							SkillName: name,
+							LinkPath:  fullPath,
+							Target:    absTarget,
+							Error:     "target does not exist",
+						})
+					} else {
+						result.HealthyLinks++
+						skillLinkCount[name]++
+					}
+				} else if !lstat.IsDir() {
+					// 非目录、非软链接的文件
+					result.UnknownFiles = append(result.UnknownFiles, UnknownFile{
 						AgentName: agent.Name,
-						SkillName: name,
-						LinkPath:  fullPath,
-						Target:    absTarget,
-						Error:     "target does not exist",
+						FileName:  name,
+						FilePath:  fullPath,
 					})
-				} else {
-					result.HealthyLinks++
-					skillLinkCount[name]++
 				}
-			} else if !lstat.IsDir() {
-				// 非目录、非软链接的文件
-				result.UnknownFiles = append(result.UnknownFiles, UnknownFile{
-					AgentName: agent.Name,
-					FileName:  name,
-					FilePath:  fullPath,
-				})
 			}
 		}
 	}

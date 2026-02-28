@@ -366,7 +366,7 @@ export namespace services {
 	}
 	export class CustomAgentConfig {
 	    name: string;
-	    globalPath: string;
+	    globalPaths: string[];
 	    localPath: string;
 	
 	    static createFrom(source: any = {}) {
@@ -376,7 +376,7 @@ export namespace services {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.name = source["name"];
-	        this.globalPath = source["globalPath"];
+	        this.globalPaths = source["globalPaths"];
 	        this.localPath = source["localPath"];
 	    }
 	}

@@ -27,9 +27,9 @@ func (as *AgentService) Startup(ctx context.Context) {
 
 // AgentConfig 定义 agent 的配置
 type AgentConfig struct {
-	Name       string `json:"name"`       // 显示名称
-	GlobalPath string `json:"globalPath"` // 全局路径（相对于 home 目录）
-	LocalPath  string `json:"localPath"`  // 项目内路径（相对于项目根目录）
+	Name        string   `json:"name"`        // 显示名称
+	GlobalPaths []string `json:"globalPaths"` // 全局路径列表（相对于 home 目录）
+	LocalPath   string   `json:"localPath"`   // 项目内路径（相对于项目根目录）
 }
 
 // AgentInfo 返回给前端的 agent 信息
@@ -41,54 +41,56 @@ type AgentInfo struct {
 
 // CustomAgentConfig 用户自定义的 agent 配置（持久化到文件）
 type CustomAgentConfig struct {
-	Name       string `json:"name"`
-	GlobalPath string `json:"globalPath"`
-	LocalPath  string `json:"localPath"`
+	Name        string   `json:"name"`
+	GlobalPaths []string `json:"globalPaths"`
+	LocalPath   string   `json:"localPath"`
 }
 
 // defaultAgents 内置的默认 agents 列表，仅在 agents.json 不存在时用于初始化
 var defaultAgents = []AgentConfig{
-	{"Amp", ".config/agents/skills", ".amp/skills"},
-	{"Kimi Code CLI", ".config/agents/skills", ".kimi/skills"},
-	{"Replit", ".config/agents/skills", ".replit/skills"},
-	{"Antigravity", ".gemini/antigravity/skills", ".gemini/skills"},
-	{"Augment", ".augment/skills", ".augment/skills"},
-	{"Claude Code", ".claude/skills", ".claude/skills"},
-	{"OpenClaw", ".moltbot/skills", ".moltbot/skills"},
-	{"Cline", ".cline/skills", ".cline/skills"},
-	{"CodeBuddy", ".codebuddy/skills", ".codebuddy/skills"},
-	{"Codex", ".codex/skills", ".codex/skills"},
-	{"Command Code", ".commandcode/skills", ".commandcode/skills"},
-	{"Continue", ".continue/skills", ".continue/skills"},
-	{"Crush", ".config/crush/skills", ".crush/skills"},
-	{"Cursor", ".cursor/skills", ".cursor/skills"},
-	{"Droid", ".factory/skills", ".factory/skills"},
-	{"Gemini CLI", ".gemini/skills", ".gemini/skills"},
-	{"GitHub Copilot", ".copilot/skills", ".copilot/skills"},
-	{"Goose", ".config/goose/skills", ".goose/skills"},
-	{"Junie", ".junie/skills", ".junie/skills"},
-	{"iFlow CLI", ".iflow/skills", ".iflow/skills"},
-	{"Kilo Code", ".kilocode/skills", ".kilocode/skills"},
-	{"Kiro CLI", ".kiro/skills", ".kiro/skills"},
-	{"Kode", ".kode/skills", ".kode/skills"},
-	{"MCPJam", ".mcpjam/skills", ".mcpjam/skills"},
-	{"Mistral Vibe", ".vibe/skills", ".vibe/skills"},
-	{"Mux", ".mux/skills", ".mux/skills"},
-	{"OpenCode", ".config/opencode/skills", ".opencode/skills"},
-	{"OpenHands", ".openhands/skills", ".openhands/skills"},
-	{"Pi", ".pi/agent/skills", ".pi/skills"},
-	{"Qoder", ".qoder/skills", ".qoder/skills"},
-	{"Qwen Code", ".qwen/skills", ".qwen/skills"},
-	{"Roo Code", ".roo/skills", ".roo/skills"},
-	{"Trae", ".trae/skills", ".trae/skills"},
-	{"Trae CN", ".trae-cn/skills", ".trae-cn/skills"},
-	{"Windsurf", ".codeium/windsurf/skills", ".windsurf/skills"},
-	{"Zencoder", ".zencoder/skills", ".zencoder/skills"},
-	{"Neovate", ".neovate/skills", ".neovate/skills"},
-	{"Pochi", ".pochi/skills", ".pochi/skills"},
-	{"AdaL", ".adal/skills", ".adal/skills"},
-	{"Cortex Code", ".cortex/skills", ".snowflake/cortex/skills"},
-	{"Universal", ".agents/skills", ".config/agents/skills"},
+	{"Amp", []string{".config/agents/skills"}, ".amp/skills"},
+	{"Kimi Code CLI", []string{".config/agents/skills", ".agents/skills", ".kimi/skills", ".claude/skills", ".codex/skills"}, ".kimi/skills"},
+	{"Replit", []string{".config/agents/skills"}, ".replit/skills"},
+	{"Antigravity", []string{".gemini/antigravity/skills"}, ".gemini/skills"},
+	{"Augment", []string{".augment/skills"}, ".augment/skills"},
+	{"Claude Code", []string{".claude/skills"}, ".claude/skills"},
+	{"OpenClaw", []string{".moltbot/skills"}, ".moltbot/skills"},
+	{"Cline", []string{".cline/skills"}, ".cline/skills"},
+	{"CodeBuddy", []string{".codebuddy/skills"}, ".codebuddy/skills"},
+	{"Codex", []string{".codex/skills"}, ".codex/skills"},
+	{"Command Code", []string{".commandcode/skills"}, ".commandcode/skills"},
+	{"Continue", []string{".continue/skills"}, ".continue/skills"},
+	{"Crush", []string{".config/crush/skills"}, ".crush/skills"},
+	{"Cursor", []string{".cursor/skills", ".cursor/skills-cursor"}, ".cursor/skills"},
+	{"Droid", []string{".factory/skills"}, ".factory/skills"},
+	{"Gemini CLI", []string{".gemini/skills"}, ".gemini/skills"},
+	{"GitHub Copilot", []string{".copilot/skills"}, ".copilot/skills"},
+	{"Goose", []string{".config/goose/skills"}, ".goose/skills"},
+	{"Junie", []string{".junie/skills"}, ".junie/skills"},
+	{"iFlow CLI", []string{".iflow/skills"}, ".iflow/skills"},
+	{"Kilo Code", []string{".kilocode/skills"}, ".kilocode/skills"},
+	{"Kiro CLI", []string{".kiro/skills"}, ".kiro/skills"},
+	{"Kode", []string{".kode/skills"}, ".kode/skills"},
+	{"MCPJam", []string{".mcpjam/skills"}, ".mcpjam/skills"},
+	{"Mistral Vibe", []string{".vibe/skills"}, ".vibe/skills"},
+	{"Mux", []string{".mux/skills"}, ".mux/skills"},
+	{"OpenCode", []string{".config/opencode/skills", ".claude/skills", ".agents/skills"}, ".opencode/skills"},
+	{"OpenHands", []string{".openhands/skills"}, ".openhands/skills"},
+	{"Pi", []string{".pi/agent/skills"}, ".pi/skills"},
+	{"Qoder", []string{".qoder/skills"}, ".qoder/skills"},
+	{"Qwen Code", []string{".qwen/skills"}, ".qwen/skills"},
+	{"Roo Code", []string{".roo/skills"}, ".roo/skills"},
+	{"Trae", []string{".trae/skills"}, ".trae/skills"},
+	{"Trae CN", []string{".trae-cn/skills"}, ".trae-cn/skills"},
+	{"Windsurf", []string{".codeium/windsurf/skills"}, ".windsurf/skills"},
+	{"Zencoder", []string{".zencoder/skills"}, ".zencoder/skills"},
+	{"Neovate", []string{".neovate/skills"}, ".neovate/skills"},
+	{"Pochi", []string{".pochi/skills"}, ".pochi/skills"},
+	{"AdaL", []string{".adal/skills"}, ".adal/skills"},
+	{"Cortex Code", []string{".cortex/skills"}, ".snowflake/cortex/skills"},
+	{"Workbuddy", []string{".workbuddy/skills"}, ".workbuddy/skills"},
+	{"CC-Switch", []string{".cc-switch/skills"}, ".cc-switch/skills"},
+	{"Universal", []string{".agents/skills"}, ".config/agents/skills"},
 }
 
 // supportedAgents 运行时的 agents 列表，从 agents.json 加载
@@ -213,7 +215,7 @@ func getAllAgentConfigs() []AgentConfig {
 	customs, err := loadCustomAgents()
 	if err == nil {
 		for _, c := range customs {
-			all = append(all, AgentConfig{Name: c.Name, GlobalPath: c.GlobalPath, LocalPath: c.LocalPath})
+			all = append(all, AgentConfig{Name: c.Name, GlobalPaths: c.GlobalPaths, LocalPath: c.LocalPath})
 		}
 	}
 	return all
@@ -497,7 +499,7 @@ func (as *AgentService) AddCustomAgent(name string) error {
 			return fmt.Errorf("自定义 Agent \"%s\" 已存在", name)
 		}
 	}
-	customs = append(customs, CustomAgentConfig{Name: name, GlobalPath: globalPath, LocalPath: localPath})
+	customs = append(customs, CustomAgentConfig{Name: name, GlobalPaths: []string{globalPath}, LocalPath: localPath})
 	return saveCustomAgents(customs)
 }
 
