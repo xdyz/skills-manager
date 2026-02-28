@@ -42,6 +42,8 @@ interface SkillCardProps {
   /** 是否已收藏 */
   isFavorite?: boolean
   onToggleFavorite?: (skillName: string) => void
+  /** 所有 Agent 总数 (用于判断是否全部链接) */
+  totalAgents?: number
 }
 
 const SkillCard = ({
@@ -63,6 +65,7 @@ const SkillCard = ({
   onTagsChange,
   isFavorite = false,
   onToggleFavorite,
+  totalAgents = 0,
 }: SkillCardProps) => {
   const { t } = useTranslation()
   const navigate = useNavigate()
@@ -133,9 +136,15 @@ const SkillCard = ({
         )}
         {skill.agents && skill.agents.length > 0 && (
           <button className="text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer text-left w-full" onClick={(e) => { e.stopPropagation(); onConfigAgentLink(skill.name) }}>
-            <span className="font-medium">{t("linked-agents-count", { count: skill.agents.length })}</span>
-            {skill.agents.length <= 3 ? skill.agents.join(", ") : (
-              <>{skill.agents.slice(0, 3).join(", ")}<span className="ml-1">+{skill.agents.length - 3}</span></>
+            {totalAgents > 0 && skill.agents.length >= totalAgents ? (
+              <span className="font-medium">{t("linked-all-agents")}</span>
+            ) : (
+              <>
+                <span className="font-medium">{t("linked-agents-count", { count: skill.agents.length })}</span>
+                {skill.agents.length <= 3 ? skill.agents.join(", ") : (
+                  <>{skill.agents.slice(0, 3).join(", ")}<span className="ml-1">+{skill.agents.length - 3}</span></>
+                )}
+              </>
             )}
           </button>
         )}

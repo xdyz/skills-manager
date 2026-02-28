@@ -27,9 +27,9 @@ const App = () => {
   const checkEnvironment = async () => {
     setLoading(true)
     try {
-      // 用 Promise.race 加超时保护，最多等 8 秒
+      // 用 Promise.race 加超时保护，最多等 15 秒（Wails 后端启动可能较慢）
       const timeout = new Promise<EnvStatus>((_, reject) =>
-        setTimeout(() => reject(new Error("timeout")), 8000)
+        setTimeout(() => reject(new Error("timeout")), 15000)
       )
       const status = await Promise.race([RefreshEnv(), timeout]) as EnvStatus
       setEnvStatus(status)

@@ -15,9 +15,13 @@ export function ExportProviders():Promise<string>;
 
 export function GetAllProviders():Promise<services.ProvidersData>;
 
+export function GetAvailableTerminals():Promise<Array<services.TerminalInfo>>;
+
 export function GetCodeBuddyActiveModel():Promise<string>;
 
 export function ImportProviders(arg1:string):Promise<number>;
+
+export function OpenTerminalWithCLI(arg1:string):Promise<void>;
 
 export function Startup(arg1:context.Context):Promise<void>;
 

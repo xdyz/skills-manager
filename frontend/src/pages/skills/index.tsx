@@ -28,8 +28,6 @@ import { useSearchParams } from "react-router-dom"
 import RemoteSkillSearch, { type RemoteSkill } from "@/components/RemoteSkillSearch"
 import SkillCard from "@/components/SkillCard"
 import ConfigAgentLinkDialog from "@/components/ConfigAgentLinkDialog"
-import CreateSkillDialog from "@/components/CreateSkillDialog"
-import HealthCheckDialog from "@/components/HealthCheckDialog"
 import type { AgentInfo, SkillData } from "@/types"
 
 const SkillsPage = () => {
@@ -64,10 +62,6 @@ const SkillsPage = () => {
   const [skillTagsMap, setSkillTagsMap] = useState<Record<string, string[]>>({})
   const [selectedTag, setSelectedTag] = useState<string | null>(null)
   const [allTags, setAllTags] = useState<string[]>([])
-
-  // Dialogs
-  const [createSkillOpen, setCreateSkillOpen] = useState(false)
-  const [healthCheckOpen, setHealthCheckOpen] = useState(false)
 
   // Favorites
   const [favorites, setFavorites] = useState<Set<string>>(new Set())
@@ -105,6 +99,16 @@ const SkillsPage = () => {
     }
     window.addEventListener("focus", handleFocus)
     return () => window.removeEventListener("focus", handleFocus)
+  }, [])
+
+  // Refresh when a skill is created via global dialog
+  useEffect(() => {
+    const handleSkillCreated = () => {
+      loadLocalSkills()
+      loadTags()
+    }
+    window.addEventListener("skill-created", handleSkillCreated)
+    return () => window.removeEventListener("skill-created", handleSkillCreated)
   }, [])
 
   useEffect(() => {
@@ -450,11 +454,11 @@ const SkillsPage = () => {
             <Add01Icon size={14} className="mr-1.5" />
             {t("install-skill")}
           </Button>
-          <Button size="sm" variant="outline" onClick={() => setCreateSkillOpen(true)}>
+          <Button size="sm" variant="outline" onClick={() => window.dispatchEvent(new CustomEvent("open-create-skill-dialog"))}>
             <Add01Icon size={14} className="mr-1.5" />
             {t("create-skill")}
           </Button>
-          <Button size="sm" variant="outline" onClick={() => setHealthCheckOpen(true)}>
+          <Button size="sm" variant="outline" onClick={() => window.dispatchEvent(new CustomEvent("open-health-check-dialog"))}>
             <Stethoscope02Icon size={14} className="mr-1.5" />
             {t("health-check")}
           </Button>
@@ -581,6 +585,7 @@ const SkillsPage = () => {
                 }}
                 isFavorite={favorites.has(skill.name)}
                 onToggleFavorite={handleToggleFavorite}
+                totalAgents={allAgents.length}
               />
             ))}
           </div>
@@ -681,11 +686,6 @@ const SkillsPage = () => {
         description={t("batch-config-link-desc", { count: selectedSkills.size })}
       />
 
-      {/* Create Skill dialog */}
-      <CreateSkillDialog open={createSkillOpen} onOpenChange={setCreateSkillOpen} onCreated={() => { loadLocalSkills(); loadTags() }} />
-
-      {/* Health Check dialog */}
-      <HealthCheckDialog open={healthCheckOpen} onOpenChange={setHealthCheckOpen} />
     </div>
   )
 }

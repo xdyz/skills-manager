@@ -25,7 +25,9 @@ import {
   Upload04Icon,
   RefreshIcon,
   Cancel01Icon,
+  CommandLineIcon,
 } from "hugeicons-react"
+import { AppTypeIcon, ProviderBrandIcon } from "@/components/AppIcons"
 import {
   Select,
   SelectContent,
@@ -44,9 +46,12 @@ import {
   ImportProviders,
   GetCodeBuddyActiveModel,
   SwitchCodeBuddyBuiltinModel,
+  OpenTerminalWithCLI,
 } from "@wailsjs/go/services/ProviderService"
+import { RefreshTray } from "@wailsjs/go/services/TrayService"
+import { EventsOn, EventsOff } from "@wailsjs/runtime/runtime"
 
-type AppType = "claude-code" | "codex" | "gemini-cli" | "codebuddy-cli"
+type AppType = "claude-code" | "codex" | "gemini-cli" | "codebuddy-cli" | "opencode"
 
 interface ProviderConfig {
   id: string
@@ -69,11 +74,12 @@ interface ProvidersData {
   activeMap: Record<string, string>
 }
 
-const APP_TYPES: { value: AppType; label: string; icon: string; configPath: string }[] = [
-  { value: "claude-code", label: "Claude Code", icon: "CC", configPath: "~/.claude/settings.json" },
-  { value: "codex", label: "Codex", icon: "CX", configPath: "~/.codex/auth.json" },
-  { value: "gemini-cli", label: "Gemini CLI", icon: "GC", configPath: "~/.gemini/.env" },
-  { value: "codebuddy-cli", label: "CodeBuddy CLI", icon: "CB", configPath: "~/.codebuddy/settings.json" },
+const APP_TYPES: { value: AppType; label: string; configPath: string }[] = [
+  { value: "claude-code", label: "Claude Code", configPath: "~/.claude/settings.json" },
+  { value: "codex", label: "Codex", configPath: "~/.codex/auth.json" },
+  { value: "gemini-cli", label: "Gemini CLI", configPath: "~/.gemini/.env" },
+  { value: "opencode", label: "OpenCode", configPath: "~/.config/opencode/opencode.json" },
+  { value: "codebuddy-cli", label: "CodeBuddy CLI", configPath: "~/.codebuddy/settings.json" },
 ]
 
 const maskApiKey = (key: string) => {
@@ -112,6 +118,7 @@ const CODEBUDDY_BUILTIN_MODELS = [
 const ProvidersPage = () => {
   const { t } = useTranslation()
   const navigate = useNavigate()
+  const [loading, setLoading] = useState(true)
   const [data, setData] = useState<ProvidersData>({ providers: [], activeMap: {} })
   const [activeTab, setActiveTab] = useState<AppType>("claude-code")
   const [providerToDelete, setProviderToDelete] = useState<string | null>(null)
@@ -135,11 +142,22 @@ const ProvidersPage = () => {
   }, [])
 
   useEffect(() => {
-    loadData()
-    DetectActiveProviders().then(activeMap => {
-      setData(prev => ({ ...prev, activeMap: activeMap || {} }))
-    }).catch(() => {})
-    GetCodeBuddyActiveModel().then(m => setCbActiveModel(m || "")).catch(() => {})
+    const timer = setTimeout(() => setLoading(false), 10000)
+    Promise.all([
+      loadData(),
+      DetectActiveProviders().then(activeMap => {
+        setData(prev => ({ ...prev, activeMap: activeMap || {} }))
+      }).catch(() => {}),
+      GetCodeBuddyActiveModel().then(m => setCbActiveModel(m || "")).catch(() => {}),
+    ]).finally(() => setLoading(false))
+    return () => clearTimeout(timer)
+  }, [loadData])
+
+  // Listen for tray provider-switched events
+  useEffect(() => {
+    const handler = () => { loadData() }
+    EventsOn("provider-switched", handler)
+    return () => { EventsOff("provider-switched") }
   }, [loadData])
 
   const handleCbBuiltinSwitch = async (modelId: string) => {
@@ -165,6 +183,7 @@ const ProvidersPage = () => {
       toast({ title: t("prov-deleted"), variant: "success" })
       setProviderToDelete(null)
       await loadData()
+      RefreshTray().catch(() => {})
     } catch (error) {
       toast({ title: t("prov-delete-failed", { error: String(error) }), variant: "destructive" })
     }
@@ -176,6 +195,7 @@ const ProvidersPage = () => {
       await SwitchProvider(id)
       toast({ title: t("prov-switched"), variant: "success" })
       await loadData()
+      RefreshTray().catch(() => {})
     } catch (error) {
       toast({ title: t("prov-switch-failed", { error: String(error) }), variant: "destructive" })
     } finally {
@@ -188,6 +208,7 @@ const ProvidersPage = () => {
       await DeactivateProvider(appType)
       toast({ title: t("prov-deactivated"), variant: "success" })
       await loadData()
+      RefreshTray().catch(() => {})
     } catch (error) {
       toast({ title: String(error), variant: "destructive" })
     }
@@ -274,6 +295,11 @@ const ProvidersPage = () => {
       </div>
 
       {/* Tabs */}
+      {loading ? (
+        <div className="flex items-center justify-center flex-1">
+          <RefreshIcon className="animate-spin text-muted-foreground" size={24} />
+        </div>
+      ) : (
       <div className="flex-1 overflow-y-auto">
         <Tabs value={activeTab} onValueChange={v => setActiveTab(v as AppType)} className="h-full flex flex-col">
           <div className="px-6 pt-4">
@@ -282,7 +308,9 @@ const ProvidersPage = () => {
                 const count = getFilteredProviders(app.value).length
                 return (
                   <TabsTrigger key={app.value} value={app.value} className="text-[13px] gap-1.5">
-                    <span className="font-mono text-[10px] w-5 h-5 rounded bg-muted flex items-center justify-center font-bold">{app.icon}</span>
+                    <span className="w-5 h-5 rounded flex items-center justify-center">
+                      <AppTypeIcon appType={app.value} size={16} />
+                    </span>
                     {app.label}
                     {count > 0 && <Badge variant="secondary" className="text-[10px] h-4 px-1.5 ml-0.5">{count}</Badge>}
                   </TabsTrigger>
@@ -298,8 +326,8 @@ const ProvidersPage = () => {
                 <div className="mb-4">
                   <div className="rounded-lg border border-primary/30 bg-primary/[0.03] shadow-sm">
                     <div className="flex items-center gap-4 p-4 pl-5">
-                      <div className="shrink-0 w-10 h-10 rounded-lg flex items-center justify-center font-mono text-xs font-bold bg-primary/15 text-primary">
-                        CB
+                      <div className="shrink-0 w-10 h-10 rounded-lg flex items-center justify-center bg-primary/10">
+                        <AppTypeIcon appType="codebuddy-cli" size={22} />
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
@@ -331,7 +359,7 @@ const ProvidersPage = () => {
               {getFilteredProviders(app.value).length === 0 && app.value !== "codebuddy-cli" ? (
                 <div className="flex flex-col items-center justify-center min-h-[360px] text-center select-none">
                   <div className="w-16 h-16 rounded-2xl bg-muted/60 flex items-center justify-center mb-5">
-                    <span className="text-2xl font-bold text-muted-foreground/40 font-mono">{app.icon}</span>
+                    <AppTypeIcon appType={app.value} size={36} className="opacity-40" />
                   </div>
                   <p className="text-[15px] font-medium text-foreground/70 mb-1.5">{t("prov-empty")}</p>
                   <p className="text-[12px] text-muted-foreground/60 mb-4">{app.configPath}</p>
@@ -363,10 +391,10 @@ const ProvidersPage = () => {
                         <div className="flex items-center gap-4 p-4 pl-5">
                           {/* Left: Icon + Info */}
                           <div className="flex items-center gap-3 flex-1 min-w-0">
-                            <div className={`shrink-0 w-10 h-10 rounded-lg flex items-center justify-center font-mono text-xs font-bold ${
-                              isActive ? "bg-primary/15 text-primary" : "bg-muted text-muted-foreground"
+                            <div className={`shrink-0 w-10 h-10 rounded-lg flex items-center justify-center ${
+                              isActive ? "bg-primary/10" : "bg-muted"
                             }`}>
-                              {app.icon}
+                              <ProviderBrandIcon presetId={provider.presetId} name={provider.name} size={22} />
                             </div>
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2">
@@ -395,15 +423,32 @@ const ProvidersPage = () => {
                           {/* Right: Actions */}
                           <div className="flex items-center gap-1 shrink-0">
                             {isActive ? (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="h-7 text-[11px] text-muted-foreground"
-                                onClick={() => handleDeactivate(app.value)}
-                              >
-                                <Cancel01Icon size={12} className="mr-1" />
-                                {t("prov-deactivate")}
-                              </Button>
+                              <>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-7 text-[11px] text-muted-foreground"
+                                  onClick={() => handleDeactivate(app.value)}
+                                >
+                                  <Cancel01Icon size={12} className="mr-1" />
+                                  {t("prov-deactivate")}
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-7 w-7 text-muted-foreground hover:text-primary"
+                                  title={t("terminal-open")}
+                                  onClick={async () => {
+                                    try {
+                                      await OpenTerminalWithCLI(app.value)
+                                    } catch (error) {
+                                      toast({ title: t("terminal-open-failed", { error: String(error) }), variant: "destructive" })
+                                    }
+                                  }}
+                                >
+                                  <CommandLineIcon size={13} />
+                                </Button>
+                              </>
                             ) : (
                               <Button
                                 size="sm"
@@ -480,6 +525,7 @@ const ProvidersPage = () => {
           ))}
         </Tabs>
       </div>
+      )}
 
       {/* Delete Confirm */}
       <AlertDialog open={!!providerToDelete} onOpenChange={open => !open && setProviderToDelete(null)}>

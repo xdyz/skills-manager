@@ -77,6 +77,7 @@ const en = {
     "remote-search": "Remote Search",
     "agent-management": "Agent Management",
     "agent-management-desc": "Manage supported AI Agent list and add custom Agents",
+    "skills-paths": "Skills Paths",
     "search-local-skills": "Search local skills...",
     "search-remote-skills-placeholder": "Search remote skills (e.g. react, vue, typescript)...",
     "search-agent": "Search Agent...",
@@ -93,6 +94,7 @@ const en = {
     reinstalling: "Reinstalling...",
     reinstall: "Reinstall",
     "linked-agents-count": "Linked to {{count}} Agent(s): ",
+    "linked-all-agents": "Linked to All Agents",
     "no-agent-linked": "No Agent linked, click to configure",
     "config-agent-link": "Configure Agent Links",
     "no-matching-agent": "No matching Agent found",
@@ -492,6 +494,10 @@ const en = {
     "skills-directory": "Skills Directory",
     "toast-settings-saved": "Settings saved",
     "toast-settings-failed": "Failed to save settings: {{error}}",
+    "terminal-setting": "Terminal App",
+    "terminal-setting-desc": "Choose the terminal for opening CLI tools",
+    "terminal-open": "Open in Terminal",
+    "terminal-open-failed": "Failed to open terminal: {{error}}",
 
     // Common extra
     error: "Error",
@@ -783,6 +789,12 @@ const en = {
     "prov-cb-builtin-desc": "Switch CodeBuddy CLI built-in models directly, no API Key needed",
     "prov-cb-builtin-placeholder": "Select a model...",
     "prov-cb-add-custom": "Add custom model provider",
+    "prov-oc-npm": "SDK Adapter",
+    "prov-oc-npm-hint": "Select the npm adapter package for the target service, most third-party services use openai-compatible",
+    "prov-oc-small-model": "Small Model",
+    "prov-oc-provider-id": "Provider ID",
+    "prov-oc-provider-id-hint": "The provider key in opencode.json, auto-generated from name if empty",
+    "prov-oc-preview-hint": "This will be written to ~/.config/opencode/opencode.json when switching",
   },
 }
 

@@ -1,5 +1,6 @@
 export interface AgentInfo {
   name: string
+  globalPaths: string[]
   localPath: string
   isCustom?: boolean
 }

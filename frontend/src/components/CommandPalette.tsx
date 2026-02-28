@@ -19,7 +19,6 @@ import {
   Globe02Icon,
   Settings02Icon,
   Store01Icon,
-  GitBranchIcon,
   KeyboardIcon,
 } from "hugeicons-react"
 import { GetAllAgentSkills } from "@wailsjs/go/services/SkillsService"
@@ -56,9 +55,7 @@ const CommandPalette = ({ open, onOpenChange, onAction }: CommandPaletteProps) =
     { id: "go-skills", label: t("command-go-skills"), icon: ChartHistogramIcon, group: t("command-actions"), action: () => navigate("/skills") },
     { id: "go-agents", label: t("command-go-agents"), icon: AiChat02Icon, group: t("command-actions"), action: () => navigate("/agents") },
     { id: "go-projects", label: t("command-go-projects"), icon: Folder01Icon, group: t("command-actions"), action: () => navigate("/projects") },
-    { id: "go-collections", label: t("collections"), icon: Folder01Icon, group: t("command-actions"), action: () => navigate("/collections") },
     { id: "go-discover", label: t("discover-title"), icon: Store01Icon, group: t("command-actions"), action: () => navigate("/discover") },
-    { id: "go-analysis", label: t("analysis-title"), icon: GitBranchIcon, group: t("command-actions"), action: () => navigate("/analysis") },
     { id: "go-settings", label: t("shortcut-go-settings"), icon: Settings02Icon, group: t("command-actions"), action: () => navigate("/settings") },
     { id: "install-skill", label: t("command-install-skill"), icon: Add01Icon, group: t("command-actions"), action: () => { navigate("/skills?action=install"); } },
     { id: "create-skill", label: t("command-create-skill"), icon: Add01Icon, group: t("command-actions"), action: () => onAction?.("create-skill") },

@@ -77,6 +77,7 @@ const zh = {
     "remote-search": "远程搜索",
     "agent-management": "Agent 管理",
     "agent-management-desc": "管理支持的 AI Agent 列表，添加自定义 Agent",
+    "skills-paths": "Skills 路径",
     "search-local-skills": "搜索本地技能...",
     "search-remote-skills-placeholder": "搜索远程技能 (例如: react, vue, typescript)...",
     "search-agent": "搜索 Agent...",
@@ -93,6 +94,7 @@ const zh = {
     reinstalling: "重新安装中...",
     reinstall: "重新安装",
     "linked-agents-count": "已链接 {{count}} 个 Agent: ",
+    "linked-all-agents": "已链接全部 Agent",
     "no-agent-linked": "未链接任何 Agent，点击配置",
     "config-agent-link": "配置 Agent 链接",
     "no-matching-agent": "未找到匹配的 Agent",
@@ -492,6 +494,10 @@ const zh = {
     "skills-directory": "技能存储目录",
     "toast-settings-saved": "设置已保存",
     "toast-settings-failed": "保存设置失败: {{error}}",
+    "terminal-setting": "终端应用",
+    "terminal-setting-desc": "选择打开 CLI 工具时使用的终端",
+    "terminal-open": "在终端中打开",
+    "terminal-open-failed": "打开终端失败: {{error}}",
 
     // Common extra
     error: "错误",
@@ -783,6 +789,12 @@ const zh = {
     "prov-cb-builtin-desc": "直接切换 CodeBuddy CLI 内置模型，无需 API Key",
     "prov-cb-builtin-placeholder": "选择模型...",
     "prov-cb-add-custom": "添加自定义模型供应商",
+    "prov-oc-npm": "SDK 适配器",
+    "prov-oc-npm-hint": "选择连接目标服务的 npm 适配器包，大多数第三方用 openai-compatible",
+    "prov-oc-small-model": "轻量模型",
+    "prov-oc-provider-id": "Provider ID",
+    "prov-oc-provider-id-hint": "opencode.json 中的 provider 键名，留空则根据名称自动生成",
+    "prov-oc-preview-hint": "切换供应商时将写入 ~/.config/opencode/opencode.json",
   },
 }
 

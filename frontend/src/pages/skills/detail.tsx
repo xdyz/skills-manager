@@ -351,58 +351,60 @@ const SkillDetailPage = () => {
               <TagManager skillName={detail.name} tags={tags} onTagsChange={setTags} compact />
             </div>
           </div>
-          <div className="flex flex-wrap items-center gap-1.5 shrink-0 justify-end max-w-[360px]">
-            <Button variant="outline" size="sm" className={`h-7 text-[12px] ${isFavorite ? "text-amber-500 border-amber-500/40" : ""}`} onClick={async () => {
-              if (!skillName) return
-              const result = await ToggleFavorite(skillName)
-              setIsFavorite(result)
-            }}>
-              <FavouriteIcon size={13} className={`mr-1 ${isFavorite ? "fill-amber-500" : ""}`} />
-              {isFavorite ? t("remove-from-favorites") : t("add-to-favorites")}
-            </Button>
-            <Button variant="outline" size="sm" className="h-7 text-[12px]" onClick={handleOpenEditor}>
-              <Edit02Icon size={13} className="mr-1" />{t("edit-skill")}
-            </Button>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm" className="h-7 text-[12px]">
-                  <SourceCodeIcon size={13} className="mr-1" />{t("open-in-editor")}
-                  <ArrowDown01Icon size={11} className="ml-0.5 opacity-60" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                {editors.map((editor) => (
-                  <DropdownMenuItem key={editor.id} onClick={() => handleOpenInSystemEditor(editor.id)} className="text-[12px] gap-2">
-                    <EditorIcon icon={editor.icon} iconBase64={editor.iconBase64} />
-                    {editor.name}
-                  </DropdownMenuItem>
-                ))}
-                {editors.length === 0 && (
-                  <DropdownMenuItem disabled className="text-[12px] text-muted-foreground">
-                    {t("no-editor-found")}
-                  </DropdownMenuItem>
-                )}
-              </DropdownMenuContent>
-            </DropdownMenu>
-            {detail.source && (
-              <Button variant="outline" size="sm" className="h-7 text-[12px]" onClick={handleLoadDiff}>
-                <GitCompareIcon size={13} className="mr-1" />
-                {t("diff-preview")}
+        </div>
+
+        {/* Action buttons */}
+        <div className="flex flex-wrap items-center gap-1.5 mt-3 justify-end">
+          <Button variant="outline" size="sm" className={`h-7 text-[12px] ${isFavorite ? "text-amber-500 border-amber-500/40" : ""}`} onClick={async () => {
+            if (!skillName) return
+            const result = await ToggleFavorite(skillName)
+            setIsFavorite(result)
+          }}>
+            <FavouriteIcon size={13} className={`mr-1 ${isFavorite ? "fill-amber-500" : ""}`} />
+            {isFavorite ? t("remove-from-favorites") : t("add-to-favorites")}
+          </Button>
+          <Button variant="outline" size="sm" className="h-7 text-[12px]" onClick={handleOpenEditor}>
+            <Edit02Icon size={13} className="mr-1" />{t("edit-skill")}
+          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" className="h-7 text-[12px]">
+                <SourceCodeIcon size={13} className="mr-1" />{t("open-in-editor")}
+                <ArrowDown01Icon size={11} className="ml-0.5 opacity-60" />
               </Button>
-            )}
-            <Button variant="outline" size="sm" className="h-7 text-[12px]" onClick={() => setConfigDialogOpen(true)}>
-              <Settings02Icon size={13} className="mr-1" />
-              {t("config-agent-link")}
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start">
+              {editors.map((editor) => (
+                <DropdownMenuItem key={editor.id} onClick={() => handleOpenInSystemEditor(editor.id)} className="text-[12px] gap-2">
+                  <EditorIcon icon={editor.icon} iconBase64={editor.iconBase64} />
+                  {editor.name}
+                </DropdownMenuItem>
+              ))}
+              {editors.length === 0 && (
+                <DropdownMenuItem disabled className="text-[12px] text-muted-foreground">
+                  {t("no-editor-found")}
+                </DropdownMenuItem>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+          {detail.source && (
+            <Button variant="outline" size="sm" className="h-7 text-[12px]" onClick={handleLoadDiff}>
+              <GitCompareIcon size={13} className="mr-1" />
+              {t("diff-preview")}
             </Button>
-            <Button variant="outline" size="sm" className="h-7 text-[12px]" onClick={handleUpdate} disabled={updating}>
-              <RefreshIcon size={13} className={`mr-1 ${updating ? "animate-spin" : ""}`} />
-              {t("update")}
-            </Button>
-            <Button variant="outline" size="sm" className="h-7 text-[12px] text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => setShowDeleteDialog(true)}>
-              <Delete02Icon size={13} className="mr-1" />
-              {t("delete")}
-            </Button>
-          </div>
+          )}
+          <Button variant="outline" size="sm" className="h-7 text-[12px]" onClick={() => setConfigDialogOpen(true)}>
+            <Settings02Icon size={13} className="mr-1" />
+            {t("config-agent-link")}
+          </Button>
+          <Button variant="outline" size="sm" className="h-7 text-[12px]" onClick={handleUpdate} disabled={updating}>
+            <RefreshIcon size={13} className={`mr-1 ${updating ? "animate-spin" : ""}`} />
+            {t("update")}
+          </Button>
+          <Button variant="outline" size="sm" className="h-7 text-[12px] text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => setShowDeleteDialog(true)}>
+            <Delete02Icon size={13} className="mr-1" />
+            {t("delete")}
+          </Button>
         </div>
       </div>
 

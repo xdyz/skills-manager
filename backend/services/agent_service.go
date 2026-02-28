@@ -34,9 +34,10 @@ type AgentConfig struct {
 
 // AgentInfo 返回给前端的 agent 信息
 type AgentInfo struct {
-	Name      string `json:"name"`
-	LocalPath string `json:"localPath"`
-	IsCustom  bool   `json:"isCustom"`
+	Name        string   `json:"name"`
+	GlobalPaths []string `json:"globalPaths"`
+	LocalPath   string   `json:"localPath"`
+	IsCustom    bool     `json:"isCustom"`
 }
 
 // CustomAgentConfig 用户自定义的 agent 配置（持久化到文件）
@@ -74,7 +75,7 @@ var defaultAgents = []AgentConfig{
 	{"MCPJam", []string{".mcpjam/skills"}, ".mcpjam/skills"},
 	{"Mistral Vibe", []string{".vibe/skills"}, ".vibe/skills"},
 	{"Mux", []string{".mux/skills"}, ".mux/skills"},
-	{"OpenCode", []string{".config/opencode/skills", ".claude/skills", ".agents/skills"}, ".opencode/skills"},
+	{"OpenCode", []string{".config/opencode/skills", ".opencode/skills", ".claude/skills", ".agents/skills"}, ".opencode/skills"},
 	{"OpenHands", []string{".openhands/skills"}, ".openhands/skills"},
 	{"Pi", []string{".pi/agent/skills"}, ".pi/skills"},
 	{"Qoder", []string{".qoder/skills"}, ".qoder/skills"},
@@ -245,7 +246,7 @@ func (as *AgentService) GetSupportedAgents() []AgentInfo {
 	allConfigs := getAllAgentConfigs()
 	agents := make([]AgentInfo, len(allConfigs))
 	for i, a := range allConfigs {
-		agents[i] = AgentInfo{Name: a.Name, LocalPath: a.LocalPath, IsCustom: customNames[a.Name]}
+		agents[i] = AgentInfo{Name: a.Name, GlobalPaths: a.GlobalPaths, LocalPath: a.LocalPath, IsCustom: customNames[a.Name]}
 	}
 	return agents
 }

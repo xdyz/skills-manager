@@ -22,6 +22,7 @@ export namespace services {
 	}
 	export class AgentInfo {
 	    name: string;
+	    globalPaths: string[];
 	    localPath: string;
 	    isCustom: boolean;
 	
@@ -32,6 +33,7 @@ export namespace services {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.name = source["name"];
+	        this.globalPaths = source["globalPaths"];
 	        this.localPath = source["localPath"];
 	        this.isCustom = source["isCustom"];
 	    }
@@ -124,6 +126,7 @@ export namespace services {
 	    defaultAgents: string[];
 	    showPath: boolean;
 	    compactMode: boolean;
+	    terminal?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new AppSettings(source);
@@ -138,6 +141,7 @@ export namespace services {
 	        this.defaultAgents = source["defaultAgents"];
 	        this.showPath = source["showPath"];
 	        this.compactMode = source["compactMode"];
+	        this.terminal = source["terminal"];
 	    }
 	}
 	export class AutoUpdateConfig {
@@ -1837,6 +1841,22 @@ export namespace services {
 	        this.description = source["description"];
 	        this.icon = source["icon"];
 	        this.count = source["count"];
+	    }
+	}
+	export class TerminalInfo {
+	    id: string;
+	    name: string;
+	    available: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new TerminalInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.available = source["available"];
 	    }
 	}
 	

@@ -34,7 +34,7 @@ import CreateSkillDialog from "@/components/CreateSkillDialog"
 import HealthCheckDialog from "@/components/HealthCheckDialog"
 import CustomSourcesDialog from "@/components/CustomSourcesDialog"
 import KeyboardShortcutsDialog from "@/components/KeyboardShortcutsDialog"
-import NotificationCenter, { type Notification } from "@/components/NotificationCenter"
+
 import {
   Home01Icon, 
   ChartHistogramIcon,
@@ -52,15 +52,14 @@ import {
   Search01Icon,
   Globe02Icon,
   Settings02Icon,
-  Folder01Icon,
-  Store01Icon,
-  GitBranchIcon,
+  Github01Icon,
   ComputerIcon,
   ArrowDataTransferHorizontalIcon,
 } from "hugeicons-react"
 import { useState, useEffect, useRef, useCallback } from "react"
 import { SelectFolder, GetFolders, RemoveFolder } from "@wailsjs/go/services/FolderService"
 import { ExportConfigToFile, ImportConfig, CheckSkillUpdates, GetAutoUpdateConfig, SetAutoUpdateConfig, RunAutoUpdate, GetSettings, SaveSettings } from "@wailsjs/go/services/SkillsService"
+import { EventsOn, EventsOff } from "@wailsjs/runtime/runtime"
 
 const PageLayout = () => {
   const navigate = useNavigate()
@@ -80,26 +79,7 @@ const PageLayout = () => {
   const [healthCheckOpen, setHealthCheckOpen] = useState(false)
   const [customSourcesOpen, setCustomSourcesOpen] = useState(false)
   const [keyboardShortcutsOpen, setKeyboardShortcutsOpen] = useState(false)
-  const [notifications, setNotifications] = useState<Notification[]>([])
   const [autoUpdateEnabled, setAutoUpdateEnabled] = useState(false)
-  const addNotification = useCallback((type: Notification["type"], title: string, message?: string) => {
-    setNotifications(prev => [{
-      id: Date.now().toString(),
-      type,
-      title,
-      message,
-      timestamp: Date.now(),
-      read: false,
-    }, ...prev].slice(0, 50))
-  }, [])
-
-  const dismissNotification = useCallback((id: string) => {
-    setNotifications(prev => prev.filter(n => n.id !== id))
-  }, [])
-
-  const clearAllNotifications = useCallback(() => {
-    setNotifications([])
-  }, [])
 
   useEffect(() => {
     // 从后端加载设置并应用主题/语言
@@ -135,13 +115,25 @@ const PageLayout = () => {
         if (Date.now() - lastCheck > intervalMs) {
           RunAutoUpdate().then(count => {
             if (count > 0) {
-              addNotification("success", t("toast-auto-update-result", { count }))
+              toast({ title: t("toast-auto-update-result", { count }), variant: "success" })
             }
           }).catch(() => {})
         }
       }
     }).catch(() => {})
-  }, [addNotification, t])
+  }, [t])
+
+  // Listen for child page events to open global dialogs
+  useEffect(() => {
+    const handleOpenCreateSkill = () => setCreateSkillOpen(true)
+    const handleOpenHealthCheck = () => setHealthCheckOpen(true)
+    window.addEventListener("open-create-skill-dialog", handleOpenCreateSkill)
+    window.addEventListener("open-health-check-dialog", handleOpenHealthCheck)
+    return () => {
+      window.removeEventListener("open-create-skill-dialog", handleOpenCreateSkill)
+      window.removeEventListener("open-health-check-dialog", handleOpenHealthCheck)
+    }
+  }, [])
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -160,6 +152,14 @@ const PageLayout = () => {
     }
     window.addEventListener("keydown", handleKeyDown)
     return () => window.removeEventListener("keydown", handleKeyDown)
+  }, [navigate])
+
+  // Listen for tray "navigate" event from backend
+  useEffect(() => {
+    const cancel = EventsOn("navigate", (path: string) => {
+      if (path) navigate(path)
+    })
+    return () => { cancel(); EventsOff("navigate") }
   }, [navigate])
 
   // Refresh folders on window focus
@@ -330,7 +330,6 @@ const PageLayout = () => {
           const count = (results || []).filter(r => r.hasUpdate).length
           if (count > 0) {
             toast({ title: t("updates-available", { count }) })
-            addNotification("info", t("updates-available", { count }))
           } else {
             toast({ title: t("all-up-to-date"), variant: "success" })
           }
@@ -345,7 +344,7 @@ const PageLayout = () => {
         setKeyboardShortcutsOpen(true)
         break
     }
-  }, [t, addNotification])
+  }, [t])
 
   const isActive = (path: string) => {
     if (path === "/skills") return location.pathname === "/skills" || location.pathname.startsWith("/skills/")
@@ -374,7 +373,6 @@ const PageLayout = () => {
               <span className="hidden sm:inline">{t("search")}...</span>
               <kbd className="text-[9px] bg-background/80 border border-border/50 px-1 py-0.5 rounded font-mono">⌘K</kbd>
             </button>
-            <NotificationCenter notifications={notifications} onDismiss={dismissNotification} onClearAll={clearAllNotifications} />
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" size="icon" className="h-7 w-7 rounded text-muted-foreground hover:text-foreground">
@@ -444,14 +442,6 @@ const PageLayout = () => {
               <AiChat02Icon size={15} />
               {t("agents")}
             </Button>
-            <Button
-              variant={isActive("/collections") ? "secondary" : "ghost"}
-              className={`justify-start gap-2.5 h-8 text-[13px] rounded ${isActive("/collections") ? "bg-primary/10 text-primary font-medium" : "text-muted-foreground hover:text-foreground"}`}
-              onClick={() => navigate("/collections")}
-            >
-              <Folder01Icon size={15} />
-              {t("collections")}
-            </Button>
 
             <div className="h-px bg-border/50 my-1.5" />
 
@@ -460,16 +450,8 @@ const PageLayout = () => {
               className={`justify-start gap-2.5 h-8 text-[13px] rounded ${isActive("/discover") ? "bg-primary/10 text-primary font-medium" : "text-muted-foreground hover:text-foreground"}`}
               onClick={() => navigate("/discover")}
             >
-              <Store01Icon size={15} />
-              {t("discover-title")}
-            </Button>
-            <Button
-              variant={isActive("/analysis") ? "secondary" : "ghost"}
-              className={`justify-start gap-2.5 h-8 text-[13px] rounded ${isActive("/analysis") ? "bg-primary/10 text-primary font-medium" : "text-muted-foreground hover:text-foreground"}`}
-              onClick={() => navigate("/analysis")}
-            >
-              <GitBranchIcon size={15} />
-              {t("analysis-title")}
+              <Github01Icon size={15} />
+              {t("repo-nav")}
             </Button>
             <Button
               variant={isActive("/providers") ? "secondary" : "ghost"}
@@ -480,20 +462,10 @@ const PageLayout = () => {
               {t("prov-nav")}
             </Button>
 
-            <div className="h-px bg-border/50 my-1.5" />
-
-            <Button
-              variant={isActive("/settings") ? "secondary" : "ghost"}
-              className={`justify-start gap-2.5 h-8 text-[13px] rounded ${isActive("/settings") ? "bg-primary/10 text-primary font-medium" : "text-muted-foreground hover:text-foreground"}`}
-              onClick={() => navigate("/settings")}
-            >
-              <Settings02Icon size={15} />
-              {t("settings")}
-            </Button>
           </nav>
 
           {/* Projects Section */}
-          <div className={`flex flex-col mt-3 overflow-hidden ${folders.length > 0 ? 'flex-1' : ''}`}>
+          <div className="flex flex-col mt-3 overflow-hidden flex-1">
             <div className="flex items-center justify-between px-3.5 mb-2">
               <h3 className="text-[11px] font-medium uppercase tracking-widest text-muted-foreground/70">{t("projects")}</h3>
               <Button 
@@ -545,6 +517,18 @@ const PageLayout = () => {
                 </div>
               </div>
             )}
+          </div>
+
+          {/* Settings at bottom */}
+          <div className="p-2.5 border-t border-border/50">
+            <Button
+              variant={isActive("/settings") ? "secondary" : "ghost"}
+              className={`w-full justify-start gap-2.5 h-8 text-[13px] rounded ${isActive("/settings") ? "bg-primary/10 text-primary font-medium" : "text-muted-foreground hover:text-foreground"}`}
+              onClick={() => navigate("/settings")}
+            >
+              <Settings02Icon size={15} />
+              {t("settings")}
+            </Button>
           </div>
         </aside>
 
@@ -630,7 +614,7 @@ const PageLayout = () => {
       </Dialog>
 
       <CommandPalette open={commandPaletteOpen} onOpenChange={setCommandPaletteOpen} onAction={handleCommandAction} />
-      <CreateSkillDialog open={createSkillOpen} onOpenChange={setCreateSkillOpen} />
+      <CreateSkillDialog open={createSkillOpen} onOpenChange={setCreateSkillOpen} onCreated={() => window.dispatchEvent(new CustomEvent("skill-created"))} />
       <HealthCheckDialog open={healthCheckOpen} onOpenChange={setHealthCheckOpen} />
       <CustomSourcesDialog open={customSourcesOpen} onOpenChange={setCustomSourcesOpen} />
       <KeyboardShortcutsDialog open={keyboardShortcutsOpen} onOpenChange={setKeyboardShortcutsOpen} />

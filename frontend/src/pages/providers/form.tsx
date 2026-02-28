@@ -27,109 +27,7 @@ import {
   GetAllProviders,
   SwitchProvider,
 } from "@wailsjs/go/services/ProviderService"
-
-type AppType = "claude-code" | "codex" | "gemini-cli" | "codebuddy-cli"
-
-// ===== Preset Provider Definitions =====
-
-interface PresetProvider {
-  id: string
-  name: string
-  webUrl: string
-  baseUrl: string
-  icon?: string
-  sponsored?: boolean
-  appTypes: AppType[]
-  // Default models for auto-fill
-  defaultModel?: string       // Claude Code: main model; Codex/Gemini: model
-  defaultModels?: {           // Claude Code only: haiku/sonnet/opus defaults
-    haiku?: string
-    sonnet?: string
-    opus?: string
-  }
-}
-
-const CLAUDE_PRESETS: PresetProvider[] = [
-  { id: "custom", name: "自定义配置", webUrl: "", baseUrl: "", appTypes: ["claude-code"] },
-  { id: "claude-official", name: "Claude Official", webUrl: "https://www.anthropic.com/claude-code", baseUrl: "", appTypes: ["claude-code"] },
-  { id: "deepseek", name: "DeepSeek", webUrl: "https://platform.deepseek.com", baseUrl: "https://api.deepseek.com/anthropic", appTypes: ["claude-code"], defaultModel: "DeepSeek-V3.2", defaultModels: { haiku: "DeepSeek-V3.2", sonnet: "DeepSeek-V3.2", opus: "DeepSeek-V3.2" } },
-  { id: "zhipu-glm", name: "Zhipu GLM", webUrl: "https://open.bigmodel.cn", baseUrl: "https://open.bigmodel.cn/api/anthropic", appTypes: ["claude-code"], defaultModel: "glm-5", defaultModels: { haiku: "glm-5", sonnet: "glm-5", opus: "glm-5" } },
-  { id: "zhipu-glm-en", name: "Zhipu GLM en", webUrl: "https://z.ai", baseUrl: "https://api.z.ai/api/anthropic", appTypes: ["claude-code"], defaultModel: "glm-5", defaultModels: { haiku: "glm-5", sonnet: "glm-5", opus: "glm-5" } },
-  { id: "bailian", name: "Bailian", webUrl: "https://bailian.console.aliyun.com", baseUrl: "https://dashscope.aliyuncs.com/apps/anthropic", appTypes: ["claude-code"] },
-  { id: "kimi", name: "Kimi", webUrl: "https://platform.moonshot.cn/console", baseUrl: "https://api.moonshot.cn/anthropic", appTypes: ["claude-code"], defaultModel: "kimi-k2.5", defaultModels: { haiku: "kimi-k2.5", sonnet: "kimi-k2.5", opus: "kimi-k2.5" } },
-  { id: "kimi-coding", name: "Kimi For Coding", webUrl: "https://www.kimi.com/coding/docs/", baseUrl: "https://api.kimi.com/coding/", appTypes: ["claude-code"] },
-  { id: "modelscope", name: "ModelScope", webUrl: "https://modelscope.cn", baseUrl: "https://api-inference.modelscope.cn", appTypes: ["claude-code"], defaultModel: "ZhipuAI/GLM-5", defaultModels: { haiku: "ZhipuAI/GLM-5", sonnet: "ZhipuAI/GLM-5", opus: "ZhipuAI/GLM-5" } },
-  { id: "kat-coder", name: "KAT-Coder", webUrl: "https://console.streamlake.ai", baseUrl: "", appTypes: ["claude-code"], defaultModel: "KAT-Coder-Pro V1", defaultModels: { haiku: "KAT-Coder-Air V1", sonnet: "KAT-Coder-Pro V1", opus: "KAT-Coder-Pro V1" } },
-  { id: "longcat", name: "Longcat", webUrl: "https://longcat.chat/platform", baseUrl: "https://api.longcat.chat/anthropic", appTypes: ["claude-code"], defaultModel: "LongCat-Flash-Chat", defaultModels: { haiku: "LongCat-Flash-Chat", sonnet: "LongCat-Flash-Chat", opus: "LongCat-Flash-Chat" } },
-  { id: "minimax", name: "MiniMax", webUrl: "https://platform.minimaxi.com", baseUrl: "https://api.minimaxi.com/anthropic", sponsored: true, appTypes: ["claude-code"], defaultModel: "MiniMax-M2.5", defaultModels: { haiku: "MiniMax-M2.5", sonnet: "MiniMax-M2.5", opus: "MiniMax-M2.5" } },
-  { id: "minimax-en", name: "MiniMax en", webUrl: "https://platform.minimax.io", baseUrl: "https://api.minimax.io/anthropic", sponsored: true, appTypes: ["claude-code"], defaultModel: "MiniMax-M2.5", defaultModels: { haiku: "MiniMax-M2.5", sonnet: "MiniMax-M2.5", opus: "MiniMax-M2.5" } },
-  { id: "doubao-seed", name: "DouBaoSeed", webUrl: "https://www.volcengine.com/product/doubao", baseUrl: "https://ark.cn-beijing.volces.com/api/coding", appTypes: ["claude-code"], defaultModel: "doubao-seed-2-0-code-preview-latest", defaultModels: { haiku: "doubao-seed-2-0-code-preview-latest", sonnet: "doubao-seed-2-0-code-preview-latest", opus: "doubao-seed-2-0-code-preview-latest" } },
-  { id: "bailing", name: "BaiLing", webUrl: "https://alipaytbox.yuque.com/sxs0ba/ling/get_started", baseUrl: "https://api.tbox.cn/api/anthropic", appTypes: ["claude-code"], defaultModel: "Ling-2.5-1T", defaultModels: { haiku: "Ling-2.5-1T", sonnet: "Ling-2.5-1T", opus: "Ling-2.5-1T" } },
-  { id: "xiaomi-mimo", name: "Xiaomi MiMo", webUrl: "https://platform.xiaomimimo.com", baseUrl: "https://api.xiaomimimo.com/anthropic", appTypes: ["claude-code"], defaultModel: "mimo-v2-flash", defaultModels: { haiku: "mimo-v2-flash", sonnet: "mimo-v2-flash", opus: "mimo-v2-flash" } },
-  { id: "aihubmix", name: "AIHubMix", webUrl: "https://aihubmix.com", baseUrl: "https://aihubmix.com", appTypes: ["claude-code"] },
-  { id: "siliconflow", name: "SiliconFlow", webUrl: "https://siliconflow.cn", baseUrl: "https://api.siliconflow.cn", appTypes: ["claude-code"], defaultModel: "Pro/MiniMaxAI/MiniMax-M2.5", defaultModels: { haiku: "Pro/MiniMaxAI/MiniMax-M2.5", sonnet: "Pro/MiniMaxAI/MiniMax-M2.5", opus: "Pro/MiniMaxAI/MiniMax-M2.5" } },
-  { id: "siliconflow-en", name: "SiliconFlow en", webUrl: "https://siliconflow.com", baseUrl: "https://api.siliconflow.com", appTypes: ["claude-code"], defaultModel: "MiniMaxAI/MiniMax-M2.5", defaultModels: { haiku: "MiniMaxAI/MiniMax-M2.5", sonnet: "MiniMaxAI/MiniMax-M2.5", opus: "MiniMaxAI/MiniMax-M2.5" } },
-  { id: "dmxapi", name: "DMXAPI", webUrl: "https://www.dmxapi.cn", baseUrl: "https://www.dmxapi.cn", sponsored: true, appTypes: ["claude-code"] },
-  { id: "packycode", name: "PackyCode", webUrl: "https://www.packyapi.com", baseUrl: "https://www.packyapi.com", sponsored: true, appTypes: ["claude-code"] },
-  { id: "cubence", name: "Cubence", webUrl: "https://cubence.com", baseUrl: "https://api.cubence.com", sponsored: true, appTypes: ["claude-code"] },
-  { id: "aigocode", name: "AIGoCode", webUrl: "https://aigocode.com", baseUrl: "https://api.aigocode.com", sponsored: true, appTypes: ["claude-code"] },
-  { id: "rightcode", name: "RightCode", webUrl: "https://www.right.codes", baseUrl: "https://www.right.codes/claude", sponsored: true, appTypes: ["claude-code"] },
-  { id: "aicodemirror", name: "AICodeMirror", webUrl: "https://www.aicodemirror.com", baseUrl: "https://api.aicodemirror.com/api/claudecode", sponsored: true, appTypes: ["claude-code"] },
-  { id: "aicoding", name: "AICoding", webUrl: "https://www.aicoding.sh", baseUrl: "https://api.aicoding.sh", sponsored: true, appTypes: ["claude-code"] },
-  { id: "crazyrouter", name: "CrazyRouter", webUrl: "https://www.crazyrouter.com", baseUrl: "https://crazyrouter.com", sponsored: true, appTypes: ["claude-code"] },
-  { id: "sssaicode", name: "SSSAiCode", webUrl: "https://www.sssaicode.com", baseUrl: "https://node-hk.sssaicode.com/api", sponsored: true, appTypes: ["claude-code"] },
-  { id: "openrouter", name: "OpenRouter", webUrl: "https://openrouter.ai", baseUrl: "https://openrouter.ai/api", appTypes: ["claude-code"], defaultModel: "anthropic/claude-sonnet-4.6", defaultModels: { haiku: "anthropic/claude-haiku-4.5", sonnet: "anthropic/claude-sonnet-4.6", opus: "anthropic/claude-opus-4.6" } },
-  { id: "nvidia", name: "Nvidia", webUrl: "https://build.nvidia.com", baseUrl: "https://integrate.api.nvidia.com", appTypes: ["claude-code"], defaultModel: "moonshotai/kimi-k2.5", defaultModels: { haiku: "moonshotai/kimi-k2.5", sonnet: "moonshotai/kimi-k2.5", opus: "moonshotai/kimi-k2.5" } },
-  { id: "aws-bedrock-aksk", name: "AWS Bedrock (AKSK)", webUrl: "https://aws.amazon.com/bedrock/", baseUrl: "", appTypes: ["claude-code"], defaultModel: "global.anthropic.claude-opus-4-6-v1", defaultModels: { haiku: "global.anthropic.claude-haiku-4-5-20251001-v1:0", sonnet: "global.anthropic.claude-sonnet-4-6", opus: "global.anthropic.claude-opus-4-6-v1" } },
-  { id: "aws-bedrock-apikey", name: "AWS Bedrock (API Key)", webUrl: "https://aws.amazon.com/bedrock/", baseUrl: "", appTypes: ["claude-code"], defaultModel: "global.anthropic.claude-opus-4-6-v1", defaultModels: { haiku: "global.anthropic.claude-haiku-4-5-20251001-v1:0", sonnet: "global.anthropic.claude-sonnet-4-6", opus: "global.anthropic.claude-opus-4-6-v1" } },
-]
-
-const CODEX_PRESETS: PresetProvider[] = [
-  { id: "custom", name: "自定义配置", webUrl: "", baseUrl: "", appTypes: ["codex"] },
-  { id: "openai-official", name: "OpenAI Official", webUrl: "https://chatgpt.com/codex", baseUrl: "", appTypes: ["codex"] },
-  { id: "azure-openai", name: "Azure OpenAI", webUrl: "https://learn.microsoft.com/en-us/azure/ai-foundry/openai/how-to/codex", baseUrl: "", appTypes: ["codex"], defaultModel: "gpt-5.2" },
-  { id: "aihubmix", name: "AIHubMix", webUrl: "https://aihubmix.com", baseUrl: "https://aihubmix.com/v1", appTypes: ["codex"], defaultModel: "gpt-5.2" },
-  { id: "dmxapi", name: "DMXAPI", webUrl: "https://www.dmxapi.cn", baseUrl: "https://www.dmxapi.cn/v1", sponsored: true, appTypes: ["codex"], defaultModel: "gpt-5.2" },
-  { id: "packycode", name: "PackyCode", webUrl: "https://www.packyapi.com", baseUrl: "https://www.packyapi.com/v1", sponsored: true, appTypes: ["codex"], defaultModel: "gpt-5.2" },
-  { id: "cubence", name: "Cubence", webUrl: "https://cubence.com", baseUrl: "https://api.cubence.com/v1", sponsored: true, appTypes: ["codex"], defaultModel: "gpt-5.2" },
-  { id: "aigocode", name: "AIGoCode", webUrl: "https://aigocode.com", baseUrl: "https://api.aigocode.com", sponsored: true, appTypes: ["codex"], defaultModel: "gpt-5.2" },
-  { id: "rightcode", name: "RightCode", webUrl: "https://www.right.codes", baseUrl: "https://right.codes/codex/v1", sponsored: true, appTypes: ["codex"], defaultModel: "gpt-5.2" },
-  { id: "aicodemirror", name: "AICodeMirror", webUrl: "https://www.aicodemirror.com", baseUrl: "https://api.aicodemirror.com/api/codex/backend-api/codex", sponsored: true, appTypes: ["codex"], defaultModel: "gpt-5.2" },
-  { id: "aicoding", name: "AICoding", webUrl: "https://www.aicoding.sh", baseUrl: "https://api.aicoding.sh", sponsored: true, appTypes: ["codex"], defaultModel: "gpt-5.3-codex" },
-  { id: "crazyrouter", name: "CrazyRouter", webUrl: "https://www.crazyrouter.com", baseUrl: "https://crazyrouter.com/v1", sponsored: true, appTypes: ["codex"], defaultModel: "gpt-5.3-codex" },
-  { id: "sssaicode", name: "SSSAiCode", webUrl: "https://www.sssaicode.com", baseUrl: "https://node-hk.sssaicode.com/api", sponsored: true, appTypes: ["codex"], defaultModel: "gpt-5.3-codex" },
-  { id: "openrouter", name: "OpenRouter", webUrl: "https://openrouter.ai", baseUrl: "https://openrouter.ai/api/v1", appTypes: ["codex"], defaultModel: "gpt-5.2" },
-]
-
-const GEMINI_PRESETS: PresetProvider[] = [
-  { id: "custom", name: "自定义配置", webUrl: "", baseUrl: "", appTypes: ["gemini-cli"] },
-  { id: "google-official", name: "Google Official", webUrl: "https://ai.google.dev/", baseUrl: "", appTypes: ["gemini-cli"], defaultModel: "gemini-3-pro" },
-  { id: "packycode", name: "PackyCode", webUrl: "https://www.packyapi.com", baseUrl: "https://www.packyapi.com", sponsored: true, appTypes: ["gemini-cli"], defaultModel: "gemini-3-pro" },
-  { id: "cubence", name: "Cubence", webUrl: "https://cubence.com", baseUrl: "https://api.cubence.com", sponsored: true, appTypes: ["gemini-cli"], defaultModel: "gemini-3-pro" },
-  { id: "aigocode", name: "AIGoCode", webUrl: "https://aigocode.com", baseUrl: "https://api.aigocode.com", sponsored: true, appTypes: ["gemini-cli"], defaultModel: "gemini-3-pro" },
-  { id: "aicodemirror", name: "AICodeMirror", webUrl: "https://www.aicodemirror.com", baseUrl: "https://api.aicodemirror.com/api/gemini", sponsored: true, appTypes: ["gemini-cli"], defaultModel: "gemini-3-pro" },
-  { id: "aicoding", name: "AICoding", webUrl: "https://www.aicoding.sh", baseUrl: "https://api.aicoding.sh", sponsored: true, appTypes: ["gemini-cli"], defaultModel: "gemini-3-pro" },
-  { id: "crazyrouter", name: "CrazyRouter", webUrl: "https://www.crazyrouter.com", baseUrl: "https://crazyrouter.com", sponsored: true, appTypes: ["gemini-cli"], defaultModel: "gemini-3-pro" },
-  { id: "sssaicode", name: "SSSAiCode", webUrl: "https://www.sssaicode.com", baseUrl: "https://node-hk.sssaicode.com/api", sponsored: true, appTypes: ["gemini-cli"], defaultModel: "gemini-3-pro" },
-  { id: "openrouter", name: "OpenRouter", webUrl: "https://openrouter.ai", baseUrl: "https://openrouter.ai/api", appTypes: ["gemini-cli"], defaultModel: "gemini-3-pro" },
-]
-
-const CODEBUDDY_PRESETS: PresetProvider[] = [
-  { id: "custom", name: "自定义配置", webUrl: "", baseUrl: "", appTypes: ["codebuddy-cli"] },
-  { id: "deepseek", name: "DeepSeek", webUrl: "https://platform.deepseek.com", baseUrl: "https://api.deepseek.com/v1/chat/completions", appTypes: ["codebuddy-cli"], defaultModel: "deepseek-chat" },
-  { id: "openrouter", name: "OpenRouter", webUrl: "https://openrouter.ai", baseUrl: "https://openrouter.ai/api/v1/chat/completions", appTypes: ["codebuddy-cli"], defaultModel: "openai/gpt-4o" },
-  { id: "ollama", name: "Ollama (Local)", webUrl: "https://ollama.com", baseUrl: "http://localhost:11434/v1/chat/completions", appTypes: ["codebuddy-cli"], defaultModel: "my-local-llm" },
-  { id: "siliconflow", name: "SiliconFlow", webUrl: "https://siliconflow.cn", baseUrl: "https://api.siliconflow.cn/v1/chat/completions", appTypes: ["codebuddy-cli"], defaultModel: "deepseek-ai/DeepSeek-V3" },
-  { id: "zhipu", name: "Zhipu GLM", webUrl: "https://open.bigmodel.cn", baseUrl: "https://open.bigmodel.cn/api/paas/v4/chat/completions", appTypes: ["codebuddy-cli"], defaultModel: "glm-4-plus" },
-  { id: "moonshot", name: "Moonshot", webUrl: "https://platform.moonshot.cn", baseUrl: "https://api.moonshot.cn/v1/chat/completions", appTypes: ["codebuddy-cli"], defaultModel: "moonshot-v1-auto" },
-]
-
-const PRESETS_MAP: Record<AppType, PresetProvider[]> = {
-  "claude-code": CLAUDE_PRESETS,
-  "codex": CODEX_PRESETS,
-  "gemini-cli": GEMINI_PRESETS,
-  "codebuddy-cli": CODEBUDDY_PRESETS,
-}
+import { PRESETS_MAP, type AppType } from "./presets"
 
 interface ProviderConfig {
   id: string
@@ -192,6 +90,12 @@ const ProviderFormPage = () => {
   const [cbSupportsReasoning, setCbSupportsReasoning] = useState(false)
   const [cbTemperature, setCbTemperature] = useState("")
 
+  // OpenCode specific
+  const [ocModel, setOcModel] = useState("")
+  const [ocNpm, setOcNpm] = useState("@ai-sdk/openai-compatible")
+  const [ocProviderId, setOcProviderId] = useState("")
+  const [ocSmallModel, setOcSmallModel] = useState("")
+
   const [saving, setSaving] = useState(false)
   const [loading, setLoading] = useState(!!editId)
 
@@ -229,6 +133,10 @@ const ProviderFormPage = () => {
         setCbSupportsImages(provider.models?.supportsImages === "true")
         setCbSupportsReasoning(provider.models?.supportsReasoning === "true")
         setCbTemperature(provider.models?.temperature || "")
+        setOcModel(provider.models?.model || "")
+        setOcNpm(provider.models?.npm || "@ai-sdk/openai-compatible")
+        setOcProviderId(provider.models?.providerId || "")
+        setOcSmallModel(provider.models?.smallModel || "")
       } catch (error) {
         console.error("Failed to load provider:", error)
       } finally {
@@ -283,6 +191,19 @@ const ProviderFormPage = () => {
       setCbModelId(preset.defaultModel || "")
       setCbVendor(preset.name)
       setCbUrl(preset.baseUrl)
+    } else if (appType === "opencode") {
+      setOcModel(preset.defaultModel || "")
+      setOcProviderId("")
+      // Auto-select the appropriate SDK adapter based on provider
+      if (preset.id === "anthropic") {
+        setOcNpm("@ai-sdk/anthropic")
+      } else if (preset.id === "openai" || preset.id === "azure-openai") {
+        setOcNpm("@ai-sdk/openai")
+      } else if (preset.id === "google") {
+        setOcNpm("@ai-sdk/google")
+      } else {
+        setOcNpm("@ai-sdk/openai-compatible")
+      }
     }
   }, [appType, editId])
 
@@ -359,6 +280,27 @@ const ProviderFormPage = () => {
     return parts.join("\n")
   }, [appType, name, apiKey, cbModelId, cbVendor, cbUrl, cbMaxInput, cbMaxOutput, cbTemperature, cbSupportsToolCall, cbSupportsImages, cbSupportsReasoning])
 
+  const opencodeConfigPreview = useMemo(() => {
+    if (appType !== "opencode") return null
+    const pid = ocProviderId || name.toLowerCase().replace(/\s+/g, "-") || "my-provider"
+    const npm = ocNpm || "@ai-sdk/openai-compatible"
+    const provider: Record<string, unknown> = { npm, name: name || "My Provider" }
+    const options: Record<string, unknown> = {}
+    if (baseUrl) options.baseURL = baseUrl
+    if (apiKey) options.apiKey = apiKey.slice(0, 8) + "..."
+    if (Object.keys(options).length > 0) provider.options = options
+    if (ocModel) {
+      provider.models = { [ocModel]: { name: ocModel } }
+    }
+    const config: Record<string, unknown> = {
+      "$schema": "https://opencode.ai/config.json",
+      model: ocModel ? `${pid}/${ocModel}` : "",
+      provider: { [pid]: provider },
+    }
+    if (ocSmallModel) config.small_model = ocSmallModel
+    return JSON.stringify(config, null, 2)
+  }, [appType, name, apiKey, baseUrl, ocModel, ocNpm, ocProviderId, ocSmallModel])
+
   const handleSave = async () => {
     if (!name.trim() || !apiKey.trim()) return
 
@@ -385,6 +327,11 @@ const ProviderFormPage = () => {
         models.supportsToolCall = cbSupportsToolCall ? "true" : "false"
         models.supportsImages = cbSupportsImages ? "true" : "false"
         models.supportsReasoning = cbSupportsReasoning ? "true" : "false"
+      } else if (appType === "opencode") {
+        if (ocModel) models.model = ocModel
+        if (ocNpm) models.npm = ocNpm
+        if (ocProviderId) models.providerId = ocProviderId
+        if (ocSmallModel) models.smallModel = ocSmallModel
       }
 
       const cfg = {
@@ -449,7 +396,7 @@ const ProviderFormPage = () => {
           {/* Agent type tab (only for new) */}
           {!editId && (
             <Tabs value={appType} onValueChange={v => { setAppType(v as AppType); setSelectedPreset("custom") }}>
-              <TabsList className="w-full grid grid-cols-4 h-10">
+              <TabsList className="w-full grid grid-cols-5 h-10">
                 <TabsTrigger value="claude-code" className="text-[13px] font-medium">
                   Claude Code
                 </TabsTrigger>
@@ -459,8 +406,11 @@ const ProviderFormPage = () => {
                 <TabsTrigger value="gemini-cli" className="text-[13px] font-medium">
                   Gemini CLI
                 </TabsTrigger>
+                <TabsTrigger value="opencode" className="text-[13px] font-medium">
+                  OpenCode
+                </TabsTrigger>
                 <TabsTrigger value="codebuddy-cli" className="text-[13px] font-medium">
-                  CodeBuddy CLI
+                  CodeBuddy
                 </TabsTrigger>
               </TabsList>
             </Tabs>
@@ -674,6 +624,58 @@ const ProviderFormPage = () => {
             </div>
           )}
 
+          {/* ===== OpenCode specific fields ===== */}
+          {appType === "opencode" && (
+            <>
+              <div className="space-y-1.5">
+                <Label className="text-xs">{t("prov-oc-npm")}</Label>
+                <Select value={ocNpm} onValueChange={setOcNpm}>
+                  <SelectTrigger className="h-9 font-mono text-xs"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="@ai-sdk/openai-compatible">@ai-sdk/openai-compatible</SelectItem>
+                    <SelectItem value="@ai-sdk/openai">@ai-sdk/openai</SelectItem>
+                    <SelectItem value="@ai-sdk/anthropic">@ai-sdk/anthropic</SelectItem>
+                    <SelectItem value="@ai-sdk/google">@ai-sdk/google</SelectItem>
+                    <SelectItem value="@ai-sdk/azure">@ai-sdk/azure</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-[11px] text-muted-foreground/60">{t("prov-oc-npm-hint")}</p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label className="text-xs">{t("prov-model")}</Label>
+                  <Input
+                    placeholder="e.g. deepseek-chat"
+                    value={ocModel}
+                    onChange={e => setOcModel(e.target.value)}
+                    className="h-9 font-mono text-xs"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">{t("prov-oc-small-model")}</Label>
+                  <Input
+                    placeholder={t("prov-optional")}
+                    value={ocSmallModel}
+                    onChange={e => setOcSmallModel(e.target.value)}
+                    className="h-9 font-mono text-xs"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs">{t("prov-oc-provider-id")}</Label>
+                <Input
+                  placeholder={name ? name.toLowerCase().replace(/\s+/g, "-") : "auto-generated"}
+                  value={ocProviderId}
+                  onChange={e => setOcProviderId(e.target.value)}
+                  className="h-9 font-mono text-xs"
+                />
+                <p className="text-[11px] text-muted-foreground/60">{t("prov-oc-provider-id-hint")}</p>
+              </div>
+            </>
+          )}
+
           {/* ===== CodeBuddy CLI specific fields ===== */}
           {appType === "codebuddy-cli" && (
             <>
@@ -827,6 +829,23 @@ const ProviderFormPage = () => {
                   {geminiConfigPreview}
                 </pre>
               </div>
+            </div>
+          )}
+
+          {appType === "opencode" && opencodeConfigPreview && (
+            <div className="space-y-2">
+              <Label className="text-xs text-muted-foreground">{t("prov-config-preview")}</Label>
+              <div className="rounded-lg border border-border/50 bg-muted/30 overflow-hidden">
+                <div className="px-3 py-2 border-b border-border/30 text-[11px] text-muted-foreground font-medium">
+                  OpenCode opencode.json *
+                </div>
+                <pre className="p-3 text-[11px] font-mono text-foreground/80 overflow-x-auto leading-relaxed whitespace-pre">
+                  {opencodeConfigPreview}
+                </pre>
+              </div>
+              <p className="text-[11px] text-muted-foreground/50 flex items-center gap-1">
+                <span>☞</span> {t("prov-oc-preview-hint")}
+              </p>
             </div>
           )}
 

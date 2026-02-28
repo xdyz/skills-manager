@@ -12,17 +12,26 @@ import {
   Folder01Icon,
   ComputerIcon,
   Download04Icon,
+  CommandLineIcon,
 } from "hugeicons-react"
 import { GetSettings, SaveSettings } from "@wailsjs/go/services/SkillsService"
+import { GetAvailableTerminals } from "@wailsjs/go/services/ProviderService"
 import { GetSupportedAgents } from "@wailsjs/go/services/AgentService"
 import type { AgentInfo } from "@/types"
 import BackupPage from "../backup"
+
+interface TerminalOption {
+  id: string
+  name: string
+  available: boolean
+}
 
 const SettingsPage = () => {
   const { t, i18n } = useTranslation()
   const [activeTab, setActiveTab] = useState<"settings" | "backup">("settings")
   const [loading, setLoading] = useState(true)
   const [allAgents, setAllAgents] = useState<AgentInfo[]>([])
+  const [availableTerminals, setAvailableTerminals] = useState<TerminalOption[]>([])
 
   const [theme, setTheme] = useState("light")
   const [language, setLanguage] = useState("zh")
@@ -31,12 +40,14 @@ const SettingsPage = () => {
   const [defaultAgents, setDefaultAgents] = useState<string[]>([])
   const [showPath, setShowPath] = useState(true)
   const [compactMode, setCompactMode] = useState(false)
+  const [terminal, setTerminal] = useState("terminal")
 
   const initialLoadDone = useRef(false)
 
   useEffect(() => {
     loadSettings()
     loadAgents()
+    loadTerminals()
   }, [])
 
   const loadSettings = async () => {
@@ -51,6 +62,7 @@ const SettingsPage = () => {
         setDefaultAgents(s.defaultAgents || [])
         setShowPath(s.showPath !== false)
         setCompactMode(s.compactMode || false)
+        setTerminal(s.terminal || "terminal")
       }
     } catch {}
     setLoading(false)
@@ -65,11 +77,18 @@ const SettingsPage = () => {
     } catch {}
   }
 
+  const loadTerminals = async () => {
+    try {
+      const result = await GetAvailableTerminals()
+      setAvailableTerminals(result || [])
+    } catch {}
+  }
+
   // 自动保存 & 即时应用
   const saveSettings = useCallback(async (settings: {
     theme: string; language: string; autoUpdate: boolean;
     updateInterval: number; defaultAgents: string[];
-    showPath: boolean; compactMode: boolean;
+    showPath: boolean; compactMode: boolean; terminal: string;
   }) => {
     try {
       await SaveSettings(JSON.stringify(settings))
@@ -93,8 +112,8 @@ const SettingsPage = () => {
     }
 
     // 自动保存到后端
-    saveSettings({ theme, language, autoUpdate, updateInterval, defaultAgents, showPath, compactMode })
-  }, [theme, language, autoUpdate, updateInterval, defaultAgents, showPath, compactMode])
+    saveSettings({ theme, language, autoUpdate, updateInterval, defaultAgents, showPath, compactMode, terminal })
+  }, [theme, language, autoUpdate, updateInterval, defaultAgents, showPath, compactMode, terminal])
 
   const toggleDefaultAgent = (name: string) => {
     setDefaultAgents(prev =>
@@ -112,7 +131,7 @@ const SettingsPage = () => {
 
   return (
     <div className="flex flex-col h-full w-full">
-      <div className="shrink-0 px-6 pt-5 pb-0 border-b border-border/50">
+      <div className="shrink-0 px-6 pt-6 pb-0 border-b border-border/50">
         <div className="space-y-1">
           <h1 className="text-lg font-semibold tracking-tight text-foreground/90">{t("settings")}</h1>
           <p className="text-[13px] text-muted-foreground">{t("settings-desc")}</p>
@@ -184,6 +203,35 @@ const SettingsPage = () => {
                   >
                     English
                   </button>
+                </div>
+              </div>
+
+              {/* Terminal */}
+              <div className="flex items-center justify-between p-4">
+                <div className="flex items-center gap-3">
+                  <CommandLineIcon size={16} className="text-muted-foreground" />
+                  <div>
+                    <span className="text-[13px]">{t("terminal-setting")}</span>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">{t("terminal-setting-desc")}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  {availableTerminals.map((term) => (
+                    <button
+                      key={term.id}
+                      disabled={!term.available}
+                      className={`px-3 py-1.5 rounded text-[12px] transition-colors ${
+                        !term.available
+                          ? "bg-muted/30 text-muted-foreground/40 cursor-not-allowed"
+                          : terminal === term.id
+                            ? "bg-primary/10 text-primary font-medium"
+                            : "bg-muted/60 text-muted-foreground hover:text-foreground"
+                      }`}
+                      onClick={() => term.available && setTerminal(term.id)}
+                    >
+                      {term.name}
+                    </button>
+                  ))}
                 </div>
               </div>
             </div>

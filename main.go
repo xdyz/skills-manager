@@ -33,6 +33,7 @@ func main() {
 	profileService := services.NewProfileService(skillsService)
 	ratingService := services.NewRatingService()
 	providerService := services.NewProviderService()
+	trayService := services.NewTrayService(providerService)
 
 	// Create application with options
 	err := wails.Run(&options.App{
@@ -61,6 +62,10 @@ func main() {
 			profileService.Startup(ctx)
 			ratingService.Startup(ctx)
 			providerService.Startup(ctx)
+			// TrayService is initialized in OnDomReady to ensure Cocoa run loop is active
+		},
+		OnDomReady: func(ctx context.Context) {
+			trayService.Startup(ctx)
 		},
 		Bind: []interface{}{
 			app,
@@ -77,6 +82,7 @@ func main() {
 			profileService,
 			ratingService,
 			providerService,
+			trayService,
 		},
 		Debug: options.Debug{
 			OpenInspectorOnStartup: true,

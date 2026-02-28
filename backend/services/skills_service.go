@@ -1274,7 +1274,22 @@ func (ss *SkillsService) UpdateSkill(skillName string) error {
 
 	entry, exists := lock.Skills[skillName]
 	if !exists {
-		return fmt.Errorf("skill not found in .skills-lock: %s", skillName)
+		// skill 不在 .skills-lock 中（可能是通过 npx skills 或手动安装的）
+		// 尝试通过 skills.sh API 查找来源
+		source, err := ss.discoverSkillSource(skillName)
+		if err != nil || source == "" {
+			return fmt.Errorf("skill not found in .skills-lock and could not discover source: %s", skillName)
+		}
+		entry = SkillLockEntry{
+			Source:     source,
+			SourceType: "github",
+			SourceURL:  fmt.Sprintf("https://github.com/%s.git", source),
+			SkillPath:  fmt.Sprintf("skills/%s/SKILL.md", skillName),
+		}
+		// 补写到 .skills-lock
+		if err := ss.updateSkillsLock(centralSkillsDir, skillName, source); err != nil {
+			fmt.Printf("[UpdateSkill] warning: failed to update .skills-lock for discovered source: %v\n", err)
+		}
 	}
 
 
@@ -1311,6 +1326,35 @@ func (ss *SkillsService) UpdateSkill(skillName string) error {
 	}
 
 	return nil
+}
+
+// discoverSkillSource 通过 skills.sh API 查找 skill 的 GitHub 来源
+// 用于处理不在 .skills-lock 中的 skill（如通过 npx skills 安装的）
+func (ss *SkillsService) discoverSkillSource(skillName string) (string, error) {
+	apiURL := fmt.Sprintf("https://skills.sh/api/search?q=%s&limit=10", skillName)
+	resp, err := httpGet(apiURL)
+	if err != nil {
+		return "", fmt.Errorf("failed to query skills.sh API: %v", err)
+	}
+
+	var apiResp struct {
+		Skills []struct {
+			Name   string `json:"name"`
+			Source string `json:"source"`
+		} `json:"skills"`
+	}
+	if err := json.Unmarshal(resp, &apiResp); err != nil {
+		return "", fmt.Errorf("failed to parse skills.sh response: %v", err)
+	}
+
+	// 精确匹配 skill 名称
+	for _, s := range apiResp.Skills {
+		if s.Name == skillName {
+			return s.Source, nil
+		}
+	}
+
+	return "", fmt.Errorf("skill %s not found on skills.sh", skillName)
 }
 
 // InstallSkillToProject 将全局 skill 安装（软链接）到指定项目目录的指定 agents
@@ -3620,6 +3664,7 @@ type AppSettings struct {
 	DefaultAgents   []string `json:"defaultAgents"`    // 默认安装到的 agents
 	ShowPath        bool     `json:"showPath"`         // 卡片是否显示路径
 	CompactMode     bool     `json:"compactMode"`      // 紧凑模式
+	Terminal        string   `json:"terminal,omitempty"` // terminal, iterm2, warp, ghostty
 }
 
 func getSettingsFilePath() (string, error) {
@@ -3680,6 +3725,7 @@ func defaultSettings() *AppSettings {
 		DefaultAgents:  allAgentNames,
 		ShowPath:       true,
 		CompactMode:    false,
+		Terminal:       "terminal",
 	}
 }
 

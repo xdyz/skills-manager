@@ -9,9 +9,9 @@ const SkillEditPage = lazy(() => import("../pages/skills/edit"))
 const AgentsPage = lazy(() => import("../pages/agents"))
 const ProjectsPage = lazy(() => import("../pages/projects"))
 const SettingsPage = lazy(() => import("../pages/settings"))
-const CollectionsPage = lazy(() => import("../pages/collections"))
+
 const DiscoverPage = lazy(() => import("../pages/discover"))
-const AnalysisPage = lazy(() => import("../pages/analysis"))
+
 const ProvidersPage = lazy(() => import("../pages/providers"))
 const ProviderFormPage = lazy(() => import("../pages/providers/form"))
 
@@ -67,17 +67,10 @@ const routes = createHashRouter([
         element: withSuspense(SettingsPage)
       },
       {
-        path: "collections",
-        element: withSuspense(CollectionsPage)
-      },
-      {
         path: "discover",
         element: withSuspense(DiscoverPage)
       },
-      {
-        path: "analysis",
-        element: withSuspense(AnalysisPage)
-      },
+
       {
         path: "providers",
         element: withSuspense(ProvidersPage)

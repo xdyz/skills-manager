@@ -26,12 +26,20 @@ export function GetAllProviders() {
   return window['go']['services']['ProviderService']['GetAllProviders']();
 }
 
+export function GetAvailableTerminals() {
+  return window['go']['services']['ProviderService']['GetAvailableTerminals']();
+}
+
 export function GetCodeBuddyActiveModel() {
   return window['go']['services']['ProviderService']['GetCodeBuddyActiveModel']();
 }
 
 export function ImportProviders(arg1) {
   return window['go']['services']['ProviderService']['ImportProviders'](arg1);
+}
+
+export function OpenTerminalWithCLI(arg1) {
+  return window['go']['services']['ProviderService']['OpenTerminalWithCLI'](arg1);
 }
 
 export function Startup(arg1) {

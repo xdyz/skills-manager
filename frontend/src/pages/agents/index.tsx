@@ -42,6 +42,7 @@ import type { AgentInfo, SkillData } from "@/types"
 const AgentsPage = () => {
   const { t } = useTranslation()
   const navigate = useNavigate()
+  const [loading, setLoading] = useState(true)
   const [allAgents, setAllAgents] = useState<AgentInfo[]>([])
   const [agentListSearch, setAgentListSearch] = useState("")
   const [showAddAgentDialog, setShowAddAgentDialog] = useState(false)
@@ -68,8 +69,12 @@ const AgentsPage = () => {
   }, [allSkills])
 
   useEffect(() => {
-    loadAgents()
-    GetAllAgentSkills().then(s => setAllSkills(s || [])).catch(() => {})
+    const timer = setTimeout(() => setLoading(false), 10000)
+    Promise.all([
+      loadAgents(),
+      GetAllAgentSkills().then(s => setAllSkills(s || [])).catch(() => {}),
+    ]).finally(() => setLoading(false))
+    return () => clearTimeout(timer)
   }, [])
 
   // Refresh data on window focus
@@ -150,7 +155,11 @@ const AgentsPage = () => {
       </div>
 
       <div className="flex-1 overflow-y-auto p-6 pt-4">
-        {filteredAgents.length === 0 ? (
+        {loading ? (
+          <div className="flex items-center justify-center h-full min-h-[300px]">
+            <RefreshIcon className="animate-spin text-muted-foreground" size={24} />
+          </div>
+        ) : filteredAgents.length === 0 ? (
           <div className="flex flex-col items-center justify-center min-h-[360px] text-center select-none">
             <div className="w-16 h-16 rounded-2xl bg-muted/60 flex items-center justify-center mb-5">
               <Search01Icon size={28} className="text-muted-foreground/50" />
@@ -160,7 +169,7 @@ const AgentsPage = () => {
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-2 md:grid-cols-2 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
             {filteredAgents.map((agent) => {
               const skillsMap = agentSkillsMap()
               const agentSkills = skillsMap[agent.name] || []
@@ -168,35 +177,50 @@ const AgentsPage = () => {
               return (
                 <div key={agent.name} className="rounded-md border border-border/50 transition-all duration-150 overflow-hidden">
                   <div
-                    className="flex items-center gap-3 p-3 hover:bg-accent/40 cursor-pointer transition-colors"
+                    className="p-3 hover:bg-accent/40 cursor-pointer transition-colors"
                     onClick={() => setExpandedAgent(isExpanded ? null : agent.name)}
                   >
-                    <div className={`p-2 rounded shrink-0 ${agent.isCustom ? 'bg-amber-500/10' : 'bg-primary/10'}`}>
-                      <AiChat02Icon size={15} className={agent.isCustom ? 'text-amber-500' : 'text-primary'} />
+                    <div className="flex items-center gap-2.5">
+                      <div className={`p-2 rounded shrink-0 ${agent.isCustom ? 'bg-amber-500/10' : 'bg-primary/10'}`}>
+                        <AiChat02Icon size={15} className={agent.isCustom ? 'text-amber-500' : 'text-primary'} />
+                      </div>
+                      <p className="text-sm font-medium truncate flex-1 min-w-0">{agent.name}</p>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <Badge variant="outline" className="text-[10px]">
+                          {agentSkills.length} skills
+                        </Badge>
+                        {agent.isCustom ? (
+                          <>
+                            <Badge variant="outline" className="text-xs text-amber-500 border-amber-500/30">{t("custom")}</Badge>
+                            <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={(e) => { e.stopPropagation(); setAgentToDelete(agent.name) }}>
+                              <Delete02Icon size={14} />
+                            </Button>
+                          </>
+                        ) : (
+                          <Badge variant="secondary" className="text-xs">{t("builtin")}</Badge>
+                        )}
+                        {isExpanded ? <ArrowUp01Icon size={14} className="text-muted-foreground" /> : <ArrowDown01Icon size={14} className="text-muted-foreground" />}
+                      </div>
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate">{agent.name}</p>
-                      <p className="text-xs text-muted-foreground truncate">{agent.localPath}</p>
-                    </div>
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <Badge variant="outline" className="text-[10px]">
-                        {agentSkills.length} skills
-                      </Badge>
-                      {agent.isCustom ? (
-                        <>
-                          <Badge variant="outline" className="text-xs text-amber-500 border-amber-500/30">{t("custom")}</Badge>
-                          <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={(e) => { e.stopPropagation(); setAgentToDelete(agent.name) }}>
-                            <Delete02Icon size={14} />
-                          </Button>
-                        </>
-                      ) : (
-                        <Badge variant="secondary" className="text-xs">{t("builtin")}</Badge>
-                      )}
-                      {isExpanded ? <ArrowUp01Icon size={14} className="text-muted-foreground" /> : <ArrowDown01Icon size={14} className="text-muted-foreground" />}
-                    </div>
+                    <p className="text-[11px] text-muted-foreground font-mono truncate mt-1.5 pl-[38px]">{agent.localPath}</p>
                   </div>
                   {isExpanded && (
-                    <div className="border-t border-border/50 bg-muted/20 px-3 py-2.5 space-y-1.5">
+                    <div className="border-t border-border/50 bg-muted/20 px-3 py-2.5 space-y-2">
+                      {/* Skills paths */}
+                      {(() => {
+                        const paths = [...new Set([...(agent.globalPaths || []).map(p => `~/${p}`), agent.localPath])]
+                        return paths.length > 1 ? (
+                          <div className="space-y-1">
+                            <p className="text-[11px] text-muted-foreground/70 font-medium">{t("skills-paths")}</p>
+                            <div className="flex flex-wrap gap-1">
+                              {paths.map((p, i) => (
+                                <span key={i} className="text-[11px] text-muted-foreground font-mono bg-muted/50 px-1.5 py-0.5 rounded">{p}</span>
+                              ))}
+                            </div>
+                          </div>
+                        ) : null
+                      })()}
+                      {/* Linked skills */}
                       {agentSkills.length === 0 ? (
                         <p className="text-xs text-muted-foreground/60 py-2 text-center">{t("no-skills")}</p>
                       ) : (

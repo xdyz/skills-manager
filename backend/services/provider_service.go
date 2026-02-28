@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -224,6 +225,8 @@ func (ps *ProviderService) SwitchProvider(id string) error {
 		err = ps.writeGeminiConfig(target)
 	case "codebuddy-cli":
 		err = ps.writeCodeBuddyConfig(target)
+	case "opencode":
+		err = ps.writeOpenCodeConfig(target)
 	default:
 		return fmt.Errorf("unknown app type: %s", target.AppType)
 	}
@@ -297,6 +300,16 @@ func (ps *ProviderService) DetectActiveProviders() map[string]string {
 					result["codebuddy-cli"] = p.ID
 					break
 				}
+			}
+		}
+	}
+
+	opencodeKey := ps.readOpenCodeAPIKey()
+	if opencodeKey != "" {
+		for _, p := range providers {
+			if p.AppType == "opencode" && p.APIKey == opencodeKey {
+				result["opencode"] = p.ID
+				break
 			}
 		}
 	}
@@ -827,6 +840,139 @@ func (ps *ProviderService) readCodeBuddyActiveModel() string {
 	return ""
 }
 
+// readOpenCodeAPIKey reads the API key from ~/.config/opencode/opencode.json
+func (ps *ProviderService) readOpenCodeAPIKey() string {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	fp := filepath.Join(homeDir, ".config", "opencode", "opencode.json")
+	raw, err := os.ReadFile(fp)
+	if err != nil {
+		return ""
+	}
+	var config map[string]interface{}
+	if err := json.Unmarshal(raw, &config); err != nil {
+		return ""
+	}
+	providerMap, ok := config["provider"].(map[string]interface{})
+	if !ok {
+		return ""
+	}
+	// Check each provider for an apiKey in options
+	for _, pv := range providerMap {
+		provObj, ok := pv.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		opts, ok := provObj["options"].(map[string]interface{})
+		if !ok {
+			continue
+		}
+		if key, ok := opts["apiKey"].(string); ok && key != "" {
+			return key
+		}
+	}
+	return ""
+}
+
+// writeOpenCodeConfig writes provider configuration to ~/.config/opencode/opencode.json
+func (ps *ProviderService) writeOpenCodeConfig(cfg *ProviderConfig) error {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return err
+	}
+	dir := filepath.Join(homeDir, ".config", "opencode")
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return err
+	}
+	fp := filepath.Join(dir, "opencode.json")
+
+	// Read existing config
+	config := map[string]interface{}{}
+	if raw, err := os.ReadFile(fp); err == nil {
+		_ = json.Unmarshal(raw, &config)
+	}
+
+	// Always keep $schema
+	if _, ok := config["$schema"]; !ok {
+		config["$schema"] = "https://opencode.ai/config.json"
+	}
+
+	// Build provider entry
+	providerID := cfg.Models["providerId"]
+	if providerID == "" {
+		// Generate from name: lowercase, replace spaces with hyphens
+		providerID = strings.ToLower(strings.ReplaceAll(strings.TrimSpace(cfg.Name), " ", "-"))
+	}
+
+	npm := cfg.Models["npm"]
+	if npm == "" {
+		npm = "@ai-sdk/openai-compatible"
+	}
+
+	providerEntry := map[string]interface{}{
+		"npm":  npm,
+		"name": cfg.Name,
+	}
+
+	// Options
+	options := map[string]interface{}{}
+	if cfg.APIKey != "" {
+		options["apiKey"] = cfg.APIKey
+	}
+	if cfg.BaseURL != "" {
+		options["baseURL"] = cfg.BaseURL
+	}
+	if v, ok := cfg.Models["timeout"]; ok && v != "" {
+		if n, err := parseIntSafe(v); err == nil {
+			options["timeout"] = n
+		}
+	}
+	if len(options) > 0 {
+		providerEntry["options"] = options
+	}
+
+	// Models
+	modelName := cfg.Models["model"]
+	modelAlias := cfg.Models["modelAlias"]
+	if modelAlias == "" && modelName != "" {
+		modelAlias = modelName
+	}
+	if modelName != "" {
+		modelsMap := map[string]interface{}{
+			modelAlias: map[string]interface{}{
+				"name": modelName,
+			},
+		}
+		providerEntry["models"] = modelsMap
+	}
+
+	// Write provider into config
+	providerMap, ok := config["provider"].(map[string]interface{})
+	if !ok {
+		providerMap = map[string]interface{}{}
+	}
+	providerMap[providerID] = providerEntry
+	config["provider"] = providerMap
+
+	// Set model field: "providerId/modelAlias"
+	if modelAlias != "" {
+		config["model"] = providerID + "/" + modelAlias
+	}
+
+	// Handle small_model if specified
+	if v, ok := cfg.Models["smallModel"]; ok && v != "" {
+		config["small_model"] = v
+	}
+
+	raw, err := json.MarshalIndent(config, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(fp, raw, 0644)
+}
+
 // --- Helper functions for type parsing ---
 
 func parseIntSafe(s string) (int64, error) {
@@ -876,6 +1022,8 @@ func (ps *ProviderService) TestProvider(id string) ProviderTestResult {
 			testURL = "https://generativelanguage.googleapis.com"
 		case "codebuddy-cli":
 			testURL = "https://api.openai.com"
+		case "opencode":
+			testURL = "https://opencode.ai"
 		}
 	}
 
@@ -930,4 +1078,122 @@ func (ps *ProviderService) ImportProviders(dataJSON string) (int, error) {
 		return 0, err
 	}
 	return count, nil
+}
+
+// TerminalInfo 终端应用信息
+type TerminalInfo struct {
+	ID        string `json:"id"`        // terminal, iterm2, warp, ghostty
+	Name      string `json:"name"`      // 显示名称
+	Available bool   `json:"available"` // 是否已安装
+}
+
+// GetAvailableTerminals 返回所有支持的终端应用及其安装状态
+func (ps *ProviderService) GetAvailableTerminals() []TerminalInfo {
+	homeDir, _ := os.UserHomeDir()
+
+	all := []struct {
+		id    string
+		name  string
+		paths []string // 可能的安装路径
+	}{
+		{"terminal", "Terminal", []string{"/System/Applications/Utilities/Terminal.app"}},
+		{"iterm2", "iTerm2", []string{"/Applications/iTerm.app", filepath.Join(homeDir, "Applications/iTerm.app")}},
+		{"warp", "Warp", []string{"/Applications/Warp.app", filepath.Join(homeDir, "Applications/Warp.app")}},
+		{"ghostty", "Ghostty", []string{"/Applications/Ghostty.app", filepath.Join(homeDir, "Applications/Ghostty.app")}},
+	}
+
+	var terminals []TerminalInfo
+	for _, c := range all {
+		available := false
+		for _, p := range c.paths {
+			if _, err := os.Stat(p); err == nil {
+				available = true
+				break
+			}
+		}
+		// Terminal.app 始终可用
+		if c.id == "terminal" {
+			available = true
+		}
+		terminals = append(terminals, TerminalInfo{ID: c.id, Name: c.name, Available: available})
+	}
+
+	return terminals
+}
+
+// OpenTerminalWithCLI 用用户配置的终端打开对应 CLI 工具
+func (ps *ProviderService) OpenTerminalWithCLI(appType string) error {
+	cliCmd := appTypeToCLI(appType)
+	if cliCmd == "" {
+		return fmt.Errorf("unknown appType: %s", appType)
+	}
+
+	terminal := "terminal"
+	ss := &SkillsService{}
+	if settings, err := ss.GetSettings(); err == nil && settings.Terminal != "" {
+		terminal = settings.Terminal
+	}
+
+	return openTerminal(terminal, cliCmd)
+}
+
+func appTypeToCLI(appType string) string {
+	switch appType {
+	case "claude-code":
+		return "claude"
+	case "codex":
+		return "codex"
+	case "gemini-cli":
+		return "gemini"
+	case "opencode":
+		return "opencode"
+	case "codebuddy-cli":
+		return "codebuddy"
+	default:
+		return ""
+	}
+}
+
+func openTerminal(terminal, cmd string) error {
+	switch terminal {
+	case "terminal":
+		script := fmt.Sprintf(`tell application "Terminal"
+	activate
+	do script "%s"
+end tell`, cmd)
+		return exec.Command("osascript", "-e", script).Start()
+
+	case "iterm2":
+		script := fmt.Sprintf(`tell application "iTerm2"
+	activate
+	create window with default profile
+	tell current session of current window
+		write text "%s"
+	end tell
+end tell`, cmd)
+		return exec.Command("osascript", "-e", script).Start()
+
+	case "warp":
+		script := fmt.Sprintf(`tell application "Warp"
+	activate
+end tell
+delay 0.5
+tell application "System Events"
+	tell process "Warp"
+		keystroke "%s"
+		key code 36
+	end tell
+end tell`, cmd)
+		return exec.Command("osascript", "-e", script).Start()
+
+	case "ghostty":
+		ghosttyPath, err := exec.LookPath("ghostty")
+		if err != nil {
+			return exec.Command("open", "-a", "Ghostty").Start()
+		}
+		return exec.Command(ghosttyPath, "-e", cmd).Start()
+
+	default:
+		return fmt.Errorf("unsupported terminal: %s", terminal)
+	}
 }
