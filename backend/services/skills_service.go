@@ -378,7 +378,7 @@ func (ss *SkillsService) BatchUpdateSkillAgentLinks(skillNames []string, agents 
 	successCount := 0
 	var lastErr error
 	for _, name := range skillNames {
-		if err := ss.UpdateSkillAgentLinks(name, agents); err != nil {
+		if _, err := ss.UpdateSkillAgentLinks(name, agents); err != nil {
 			lastErr = err
 		} else {
 			successCount++
@@ -1023,11 +1023,11 @@ func (ss *SkillsService) GetSkillAgentLinks(skillName string) ([]string, error) 
 	return linkedAgents, nil
 }
 
-// UpdateSkillAgentLinks 更新全局 skill 的 agent 软链接配置
-func (ss *SkillsService) UpdateSkillAgentLinks(skillName string, agents []string) error {
+// UpdateSkillAgentLinks 更新全局 skill 的 agent 软链接配置，返回实际链接成功的 agent 数量
+func (ss *SkillsService) UpdateSkillAgentLinks(skillName string, agents []string) (int, error) {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
-		return fmt.Errorf("failed to get home directory: %v", err)
+		return 0, fmt.Errorf("failed to get home directory: %v", err)
 	}
 
 	centralSkillsDir := filepath.Join(homeDir, ".agents", "skills")
@@ -1035,9 +1035,8 @@ func (ss *SkillsService) UpdateSkillAgentLinks(skillName string, agents []string
 
 	// 检查 skill 是否存在
 	if _, err := os.Stat(skillSourcePath); os.IsNotExist(err) {
-		return fmt.Errorf("skill not found: %s", skillName)
+		return 0, fmt.Errorf("skill not found: %s", skillName)
 	}
-
 
 	// 构建目标 agent 集合
 	agentSet := make(map[string]bool)
@@ -1045,8 +1044,8 @@ func (ss *SkillsService) UpdateSkillAgentLinks(skillName string, agents []string
 		agentSet[name] = true
 	}
 
-	addedCount := 0
-	removedCount := 0
+	// 跟踪每个 agent 是否至少有一个路径链接成功
+	agentLinked := make(map[string]bool)
 
 	for _, agent := range getAllAgentConfigs() {
 		shouldExist := agentSet[agent.Name]
@@ -1059,35 +1058,34 @@ func (ss *SkillsService) UpdateSkillAgentLinks(skillName string, agents []string
 			linkPath := filepath.Join(agentSkillsDir, skillName)
 
 			if shouldExist {
-				// 在所有全局路径中创建链接
-				linkExists := false
+				// 检查是否已存在
 				if stat, err := os.Lstat(linkPath); err == nil {
 					if stat.Mode()&os.ModeSymlink != 0 {
-						linkExists = true
-					}
-				}
-				if !linkExists {
-					if err := os.MkdirAll(agentSkillsDir, 0755); err != nil {
+						// 已经是软链接，算成功
+						agentLinked[agent.Name] = true
 						continue
 					}
-					if err := os.Symlink(skillSourcePath, linkPath); err == nil {
-						addedCount++
-					}
+					// 非软链接的文件/目录已存在，跳过不覆盖
+					continue
+				}
+				if err := os.MkdirAll(agentSkillsDir, 0755); err != nil {
+					continue
+				}
+				if err := os.Symlink(skillSourcePath, linkPath); err == nil {
+					agentLinked[agent.Name] = true
 				}
 			} else {
 				// 从所有全局路径中删除链接
 				if stat, err := os.Lstat(linkPath); err == nil {
 					if stat.Mode()&os.ModeSymlink != 0 {
-						if err := os.Remove(linkPath); err == nil {
-							removedCount++
-						}
+						os.Remove(linkPath)
 					}
 				}
 			}
 		}
 	}
 
-	return nil
+	return len(agentLinked), nil
 }
 
 // GetProjectSkillAgentLinks 获取项目中某个 skill 当前链接到了哪些 agent

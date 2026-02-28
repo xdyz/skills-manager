@@ -88,9 +88,6 @@ var defaultAgents = []AgentConfig{
 	{"Pochi", []string{".pochi/skills"}, ".pochi/skills"},
 	{"AdaL", []string{".adal/skills"}, ".adal/skills"},
 	{"Cortex Code", []string{".cortex/skills"}, ".snowflake/cortex/skills"},
-	{"Workbuddy", []string{".workbuddy/skills"}, ".workbuddy/skills"},
-	{"CC-Switch", []string{".cc-switch/skills"}, ".cc-switch/skills"},
-	{"Universal", []string{".agents/skills"}, ".config/agents/skills"},
 }
 
 // supportedAgents 运行时的 agents 列表，从 agents.json 加载
@@ -345,7 +342,6 @@ func (as *AgentService) syncSkillsToAgent(projectPath string, targetAgent *Agent
 		return
 	}
 
-
 	for _, skill := range skillMap {
 		targetPath := filepath.Join(targetSkillsDir, skill.name)
 
@@ -523,5 +519,3 @@ func (as *AgentService) RemoveCustomAgent(name string) error {
 	}
 	return saveCustomAgents(result)
 }
-
-

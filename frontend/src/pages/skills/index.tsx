@@ -268,8 +268,9 @@ const SkillsPage = () => {
   }
 
   const handleSaveLinks = async (skillName: string, agents: string[]) => {
-    await UpdateSkillAgentLinks(skillName, agents)
-    toast({ title: t("toast-links-updated", { name: skillName, count: agents.length }), variant: "success" })
+    const linkedCount = await UpdateSkillAgentLinks(skillName, agents)
+    toast({ title: t("toast-links-updated", { name: skillName, count: linkedCount }), variant: "success" })
+    await loadLocalSkills()
   }
 
   // Batch operations

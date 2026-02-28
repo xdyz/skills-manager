@@ -210,8 +210,9 @@ const SkillDetailPage = () => {
   }
 
   const handleSaveLinks = async (name: string, agents: string[]) => {
-    await UpdateSkillAgentLinks(name, agents)
-    toast({ title: t("toast-links-updated", { name, count: agents.length }), variant: "success" })
+    const linkedCount = await UpdateSkillAgentLinks(name, agents)
+    toast({ title: t("toast-links-updated", { name, count: linkedCount }), variant: "success" })
+    await loadDetail(name)
   }
 
   const handleOpenEditor = () => {

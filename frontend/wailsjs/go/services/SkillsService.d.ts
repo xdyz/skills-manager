@@ -125,4 +125,4 @@ export function UpdateProjectSkillAgentLinks(arg1:string,arg2:string,arg3:Array<
 
 export function UpdateSkill(arg1:string):Promise<void>;
 
-export function UpdateSkillAgentLinks(arg1:string,arg2:Array<string>):Promise<void>;
+export function UpdateSkillAgentLinks(arg1:string,arg2:Array<string>):Promise<number>;
