@@ -71,7 +71,7 @@ const SetupPage = ({ envStatus, onEnvReady }: SetupPageProps) => {
           <div className="mx-auto mb-4">
             <Logo size={56} className="mx-auto" />
           </div>
-          <h1 className="text-2xl font-semibold tracking-tight">Skills Manager</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Agent Hub</h1>
           <p className="mt-2 text-sm text-muted-foreground">
             {t("setup-deps-required")}
           </p>

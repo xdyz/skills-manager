@@ -41,7 +41,7 @@ const LogoPreview = () => {
     <div className="h-full overflow-y-auto">
       <div className="max-w-5xl mx-auto p-8 space-y-6">
         <div>
-          <h1 className="text-xl font-bold text-foreground">Skills Manager Logo 设计</h1>
+          <h1 className="text-xl font-bold text-foreground">Agent Hub Logo 设计</h1>
           <p className="text-sm text-muted-foreground mt-1">抽象气球树 — 光感 × 阴影 × 渐变 × 半透明</p>
         </div>
 

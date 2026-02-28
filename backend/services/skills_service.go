@@ -1829,7 +1829,7 @@ func (ss *SkillsService) ExportConfigToFile() (string, error) {
 		return "", fmt.Errorf("failed to marshal config: %v", err)
 	}
 
-	defaultFilename := fmt.Sprintf("skills-manager-config-%s.json", time.Now().Format("2006-01-02"))
+	defaultFilename := fmt.Sprintf("agent-hub-config-%s.json", time.Now().Format("2006-01-02"))
 
 	savePath, err := wailsRuntime.SaveFileDialog(ss.ctx, wailsRuntime.SaveDialogOptions{
 		DefaultFilename: defaultFilename,

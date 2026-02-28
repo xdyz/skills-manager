@@ -362,7 +362,7 @@ const PageLayout = () => {
         <div className="flex items-center justify-between px-5 h-12">
           <div className="flex items-center gap-2.5">
             <Logo size={24} />
-            <span className="text-[13px] font-semibold tracking-tight text-foreground/85">Skills Manager</span>
+            <span className="text-[13px] font-semibold tracking-tight text-foreground/85">Agent Hub</span>
           </div>
           <div className="flex items-center gap-1">
             <button

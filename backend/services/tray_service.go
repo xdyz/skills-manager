@@ -8,7 +8,7 @@ import (
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 
-	"skills-manager/backend/tray"
+	"agent-hub/backend/tray"
 )
 
 // AppType label mapping for tray menu

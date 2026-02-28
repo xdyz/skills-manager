@@ -1,52 +1,101 @@
-# Skills Manager
+# Agent Hub
 
 <p align="center">
-  <img src="build/appicon.png" width="128" height="128" alt="Skills Manager Logo">
+  <img src="build/appicon.png" width="128" height="128" alt="Agent Hub Logo">
 </p>
 
 <p align="center">
-  <strong>一站式 AI Agent Skills 管理工具</strong><br>
+  <strong>AI 编程工具统一管理平台</strong><br>
   基于 <a href="https://wails.io/">Wails v2</a> 构建的 macOS 桌面应用
 </p>
 
 <p align="center">
-  <a href="https://github.com/xdyz/skills-manager/releases/latest">📦 下载 DMG</a> ·
+  <a href="https://github.com/xdyz/agent-hub/releases/latest">📦 下载 DMG</a> ·
   <a href="https://skills.sh">🌐 skills.sh</a>
 </p>
 
 ---
 
-## 什么是 Skills Manager？
+## 什么是 Agent Hub？
 
-Skills Manager 让你通过图形界面统一管理 AI Agent 的 Skills（技能扩展包）。支持从 [skills.sh](https://skills.sh) 搜索、安装远程 Skills，并通过软链接机制一键链接到 **36+ 个 AI Agent**（Claude Code、Cursor、GitHub Copilot、Gemini CLI、Windsurf 等）。
+Agent Hub 是一个 AI 编程工具的统一管理平台。它不仅能管理 AI Agent 的 Skills（技能扩展包），还能一键切换 API 供应商、通过系统托盘快速操控多款 CLI 工具、管理项目级配置等。
+
+核心能力：
+
+- **技能管理** — 从 [skills.sh](https://skills.sh) 搜索安装 Skills，通过软链接分发到 **40+ 款 AI Agent**
+- **供应商切换** — 为 Claude Code / Codex / Gemini CLI / CodeBuddy CLI / OpenCode 一键切换 API 供应商，预设 **30+ 家**第三方服务商
+- **系统托盘** — 常驻菜单栏，无需打开主界面即可切换供应商、启动终端
+- **项目管理** — 按项目维度管理 Skills，互不干扰
 
 ## 功能特性
 
 ### 🔧 全局技能管理
 - 从 [skills.sh](https://skills.sh) 搜索远程 Skills，一键安装到中央仓库（`~/.agents/skills/`）
-- 查看已安装技能详情（名称、描述、语言、框架等）
+- 查看已安装技能详情（名称、描述、语言、框架、来源等）
 - 一键更新 / 重新安装 / 删除技能
+- 批量操作：批量删除、批量配置链接、批量更新
+- 安装前预览 SKILL.md 内容，更新前 Diff 对比差异
+- 内置 Markdown 编辑器，支持分栏预览、代码模板、Frontmatter 编辑
+- 创建自定义技能（空白 / React / Python / Vue 模板）
+- 收藏、标签、评分、备注系统
+- 健康检查：扫描软链接完整性，检测断裂链接和孤立技能，支持自动修复
+- 自定义源：添加私有 Git 仓库作为技能来源（支持 PAT Token 认证）
 
 ### 🔗 Agent 链接管理
-- 支持 36+ 内置 AI Agent，覆盖主流 IDE 和 CLI 工具
+- 支持 **40+** 内置 AI Agent，覆盖主流 IDE 和 CLI 工具
+  - Claude Code、Codex、Gemini CLI、Cursor、Cline、GitHub Copilot、Windsurf、Continue、Roo Code、Kilo Code、Kiro CLI、OpenCode、Augment、CodeBuddy、Goose、Trae、Qwen Code、Kimi Code CLI 等
 - 灵活配置每个 Skill 关联到哪些 Agent（通过软链接实现）
 - 支持添加自定义 Agent
-- 自动检测官方 Skills CLI 的 Agent 更新，一键同步新 Agent
+- 自动检测 Skills CLI 的 Agent 更新，一键同步
+
+### 🔄 供应商一键切换
+- 支持 **5 款** CLI 工具：Claude Code、Codex、Gemini CLI、CodeBuddy CLI、OpenCode
+- 预设 **30+** 家 API 供应商：DeepSeek、智谱 GLM、Kimi、百炼、豆包、SiliconFlow、OpenRouter、AWS Bedrock 等
+- 一键写入对应工具的配置文件，立即生效
+- 支持 Anthropic 原生格式和 OpenAI 兼容格式
+- CodeBuddy 内置 **20+** 款模型直接切换
+- 连通性测试、配置预览、API 格式和认证方式可选
+
+### 🖥️ 系统托盘
+- 常驻 macOS 菜单栏，支持 Light / Dark 模式自适应图标
+- 二级子菜单切换 API 供应商，当前激活项有勾选标记
+- CodeBuddy 内置模型 + 自定义供应商分组展示
+- 一键打开终端启动 CLI 工具
+- 打开主界面、设置、退出
 
 ### 📁 项目级管理
 - 为不同项目独立配置 Skills，互不干扰
-- 支持全局软链接或项目本地安装两种模式
-- 项目内按 Agent 维度管理：启用/禁用/查看每个 Agent 目录下的 Skills
+- 项目内按 Agent 维度管理：启用 / 禁用 / 查看每个 Agent 目录下的 Skills
 - 从侧边栏快速切换项目
+- 项目初始化向导：自动检测项目类型，推荐适合的技能
+- 克隆配置：将一个项目的技能配置复制到另一个项目
 
-### 🛡️ 环境检测
-- 启动时自动检查 Node.js、npx、Skills CLI 等依赖
-- 缺失依赖时引导一键安装
+### 🌐 仓库导入
+- 输入 GitHub 仓库 URL，自动扫描其中的技能文件
+- 批量选择与安装发现的技能
 
-### 🎨 其他
-- 支持 Light / Dark 主题切换
-- 支持中文 / English 双语
+### 📦 备份与恢复
+- 手动 / 自动备份（ZIP 压缩，含校验和）
+- 选择性恢复：技能文件、用户设置、项目配置可独立恢复
+- 备份列表管理
+
+### 📊 更多功能
+- **模板市场** — 浏览 / 搜索技能模板，从模板快速创建技能
+- **智能推荐** — 分析项目类型自动推荐适合的技能
+- **依赖分析** — 可视化技能间依赖关系，检测冲突和循环依赖
+- **性能监控** — 技能使用频率、执行时间、错误率追踪
+- **配置档案** — 保存 Agent 链接状态快照，一键切换配置方案
+- **技能对比** — 并排对比两个技能的详细信息
+- **技能集合** — 自定义分组，一键安装整个集合
+- **活动日志** — 所有操作的时间线记录
+- **命令面板** — `⌘K` 快速搜索和操作
+- **导出 / 导入** — 完整配置的导出与恢复
+
+### 🎨 体验
+- Light / Dark / 跟随系统 三种主题
+- 中文 / English 双语
 - 首页仪表盘：已安装技能数、Agent 数、总链接数、项目数一览
+- 键盘快捷键支持
 
 ## 截图
 
@@ -56,17 +105,17 @@ Skills Manager 让你通过图形界面统一管理 AI Agent 的 Skills（技能
 
 ### 方式一：下载 DMG（推荐）
 
-前往 [Releases](https://github.com/xdyz/skills-manager/releases/latest) 下载最新的 `Skills-Manager.dmg`。
+前往 [Releases](https://github.com/xdyz/agent-hub/releases/latest) 下载最新的 `Agent-Hub.dmg`。
 
-1. 打开 DMG，将 **Skills Manager** 拖入 Applications
+1. 打开 DMG，将应用拖入 Applications
 2. 首次打开：**右键点击应用 → 打开**（因未签名需手动允许一次）
 
 ### 方式二：从源码构建
 
 ```bash
 # 前置条件：Go 1.23+、Node.js 18+、pnpm、Wails CLI
-git clone https://github.com/xdyz/skills-manager.git
-cd skills-manager
+git clone https://github.com/xdyz/agent-hub.git
+cd agent-hub
 wails build -platform darwin/universal
 # 生成的 .app 在 build/bin/ 目录下
 ```
@@ -80,29 +129,45 @@ wails build -platform darwin/universal
 | 前端 | React 19 + TypeScript + Vite |
 | UI | Tailwind CSS + shadcn/ui (Radix) |
 | 图标 | hugeicons-react |
+| 系统托盘 | Cocoa NSStatusItem (Objective-C) |
 | 包管理 | pnpm（前端）/ Go Modules（后端）|
 
 ## 项目结构
 
 ```
-skills-manager/
+agent-hub/
 ├── main.go                      # 应用入口
 ├── backend/
 │   ├── app.go                   # App 主结构
+│   ├── tray/                    # macOS 系统托盘（ObjC + Go）
 │   └── services/
+│       ├── skills_service.go    # 技能搜索/安装/更新/删除/链接
+│       ├── agent_service.go     # Agent 管理/更新检测
+│       ├── provider_service.go  # 供应商配置/切换
+│       ├── tray_service.go      # 托盘菜单构建/事件处理
 │       ├── env_service.go       # 环境检测（Node/npx/CLI）
 │       ├── folder_service.go    # 项目文件夹管理
-│       ├── skills_service.go    # 技能搜索/安装/更新/删除/链接
-│       └── agent_service.go     # Agent 管理/更新检测
+│       ├── backup_service.go    # 备份与恢复
+│       ├── template_service.go  # 模板市场
+│       ├── search_service.go    # 全文搜索索引
+│       ├── recommendation_service.go  # 智能推荐
+│       ├── dependency_service.go      # 依赖分析
+│       ├── monitoring_service.go      # 性能监控
+│       ├── profile_service.go   # 配置档案
+│       └── rating_service.go    # 评分系统
 ├── frontend/
 │   └── src/
-│       ├── components/          # 通用组件（Logo、RemoteSkillSearch 等）
+│       ├── components/          # 通用组件
 │       ├── pages/
 │       │   ├── layout.tsx       # 应用布局（Header + Sidebar + Content）
 │       │   ├── home/            # 首页仪表盘
-│       │   ├── skills/          # 全局技能管理（本地/远程搜索）
+│       │   ├── skills/          # 全局技能管理
 │       │   ├── agents/          # Agent 管理
-│       │   └── projects/        # 项目级 Skills 管理
+│       │   ├── providers/       # 供应商管理
+│       │   ├── projects/        # 项目级管理
+│       │   ├── discover/        # 仓库导入
+│       │   ├── settings/        # 设置
+│       │   └── ...              # 模板/推荐/监控/备份等
 │       ├── i18n/                # 国际化（zh/en）
 │       └── routes/              # 路由配置
 ├── build/                       # 构建资源（图标等）
@@ -115,7 +180,7 @@ skills-manager/
 | 路径 | 用途 |
 |------|------|
 | `~/.agents/skills/` | 中央 Skills 仓库（兼容 `npx skills`）|
-| `~/.skills-manager/` | 应用配置（项目列表、自定义 Agent 等）|
+| `~/.skills-manager/` | 应用配置（项目列表、Agent 配置、供应商配置、备份等）|
 
 ## 开发
 
@@ -128,7 +193,7 @@ wails dev
 
 本工具使用 [skills.sh](https://skills.sh) 的公开 API 搜索技能，技能本身来自各自的 GitHub 仓库，遵循其原始许可证。
 
-本项目与 skills.sh 官方无关，仅为社区开发的第三方 GUI 客户端。
+本项目与 skills.sh 官方无关，仅为社区开发的第三方管理工具。
 
 ## License
 

@@ -376,7 +376,7 @@ category: data-science
 		enhanced[i] = EnhancedSkillTemplate{
 			SkillTemplate: template,
 			Category:      category,
-			Author:        "Skills Manager",
+			Author:        "Agent Hub",
 			Rating:        4.5,
 			Downloads:     100 + i*50, // 模拟下载量
 			Tags:          []string{template.Language, template.Framework},
@@ -572,7 +572,7 @@ func (ts *TemplateService) getTemplateSources() ([]TemplateSource, error) {
 		defaultSources := []TemplateSource{
 			{
 				Name:    "Official Templates",
-				URL:     "https://github.com/skills-manager/templates",
+				URL:     "https://github.com/agent-hub/templates",
 				Type:    "github",
 				Enabled: true,
 			},

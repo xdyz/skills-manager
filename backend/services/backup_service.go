@@ -99,7 +99,7 @@ func (bs *BackupService) CreateBackup(name, description string, items []string) 
 	// 生成备份ID和文件名
 	backupID := fmt.Sprintf("backup_%d", time.Now().Unix())
 	timestamp := time.Now().Format("20060102_150405")
-	fileName := fmt.Sprintf("skills_manager_backup_%s.zip", timestamp)
+	fileName := fmt.Sprintf("agent_hub_backup_%s.zip", timestamp)
 	
 	backupDir := config.BackupLocation
 	if backupDir == "" {

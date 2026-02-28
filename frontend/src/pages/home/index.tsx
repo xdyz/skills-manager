@@ -152,7 +152,7 @@ const HomePage = () => {
         <div className="flex items-center gap-3">
           <Logo size={44} showBackground />
           <div>
-            <h1 className="text-lg font-semibold tracking-tight text-foreground/90">Skills Manager</h1>
+            <h1 className="text-lg font-semibold tracking-tight text-foreground/90">Agent Hub</h1>
             <p className="text-[12px] text-muted-foreground mt-0.5">{t("home-subtitle")}</p>
           </div>
         </div>

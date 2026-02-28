@@ -3,8 +3,8 @@ package main
 import (
 	"context"
 	"embed"
-	"skills-manager/backend"
-	"skills-manager/backend/services"
+	"agent-hub/backend"
+	"agent-hub/backend/services"
 
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
@@ -37,7 +37,7 @@ func main() {
 
 	// Create application with options
 	err := wails.Run(&options.App{
-		Title:             "Skills Manager",
+		Title:             "Agent Hub",
 		Width:             1024,
 		Height:            768,
 		HideWindowOnClose: true,

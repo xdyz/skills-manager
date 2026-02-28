@@ -1,4 +1,4 @@
-module skills-manager
+module agent-hub
 
 go 1.23
 
