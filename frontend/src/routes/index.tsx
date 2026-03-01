@@ -6,6 +6,7 @@ const HomePage = lazy(() => import("../pages/home"))
 const SkillsPage = lazy(() => import("../pages/skills"))
 const SkillDetailPage = lazy(() => import("../pages/skills/detail"))
 const SkillEditPage = lazy(() => import("../pages/skills/edit"))
+const SkillFilesPage = lazy(() => import("../pages/skills/files"))
 const AgentsPage = lazy(() => import("../pages/agents"))
 const ProjectsPage = lazy(() => import("../pages/projects"))
 const SettingsPage = lazy(() => import("../pages/settings"))
@@ -53,6 +54,10 @@ const routes = createHashRouter([
       {
         path: "skills/edit",
         element: withSuspense(SkillEditPage)
+      },
+      {
+        path: "skills/files",
+        element: withSuspense(SkillFilesPage)
       },
       {
         path: "agents",

@@ -27,7 +27,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { GetRating, SetRating } from "@wailsjs/go/services/RatingService"
 import {
   ArrowLeft02Icon,
   CodeIcon,
@@ -43,7 +42,6 @@ import {
   FavouriteIcon,
   SourceCodeIcon,
   ArrowDown01Icon,
-  StarIcon,
 } from "hugeicons-react"
 import { GetSkillDetail, DeleteSkill, UpdateSkill, GetSkillAgentLinks, UpdateSkillAgentLinks, GetSkillDiff, GetSkillTags, GetFavorites, ToggleFavorite, GetAvailableEditors, OpenSkillInEditor, GetSkillFiles } from "@wailsjs/go/services/SkillsService"
 import { GetSupportedAgents } from "@wailsjs/go/services/AgentService"
@@ -53,7 +51,6 @@ import { diffLines } from "diff"
 import ConfigAgentLinkDialog from "@/components/ConfigAgentLinkDialog"
 import TagManager from "@/components/TagManager"
 import type { AgentInfo } from "@/types"
-import { Input } from "@/components/ui/input"
 
 interface SkillDetailData {
   name: string
@@ -100,16 +97,6 @@ const SkillDetailPage = () => {
 
   // Skill files (multi-file view)
   const [skillFiles, setSkillFiles] = useState<{ name: string; isDir: boolean; size: number; content: string }[]>([])
-  const [activeFile, setActiveFile] = useState<string>("SKILL.md")
-
-  // Rating
-  const [rating, setRating] = useState(0)
-  const [ratingNote, setRatingNote] = useState("")
-  const [ratingHover, setRatingHover] = useState(0)
-
-  // Rating service bindings
-  const getRatingFn = (name: string) => GetRating(name).catch(() => ({ rating: 0, note: "" }))
-  const setRatingFn = (name: string, r: number, note: string) => SetRating(name, r, note)
 
   const goBack = () => {
     if (window.history.length > 1) {
@@ -126,20 +113,10 @@ const SkillDetailPage = () => {
       GetSkillTags(skillName).then(t => setTags(t || [])).catch(() => {})
       GetFavorites().then(favs => setIsFavorite((favs || []).includes(skillName))).catch(() => {})
       GetSkillFiles(skillName).then(files => {
-        const fileList = (files || []).filter(f => !f.isDir)
-        setSkillFiles(fileList)
-        if (fileList.length > 0) {
-          setActiveFile(fileList[0].name)
-        }
+        setSkillFiles(files || [])
       }).catch(() => {})
     }
     GetAvailableEditors().then(e => setEditors(e || [])).catch(() => {})
-    if (skillName) {
-      getRatingFn(skillName).then((r: any) => {
-        setRating(r?.rating || 0)
-        setRatingNote(r?.note || "")
-      }).catch(() => {})
-    }
   }, [skillName])
 
   // Refresh data silently on window focus
@@ -240,27 +217,6 @@ const SkillDetailPage = () => {
       setShowDiffDialog(false)
     } finally {
       setLoadingDiff(false)
-    }
-  }
-
-  const handleSaveRating = async (newRating: number) => {
-    if (!skillName) return
-    setRating(newRating)
-    try {
-      await setRatingFn(skillName, newRating, ratingNote)
-      toast({ title: t("rating-saved"), variant: "success" })
-    } catch (error) {
-      toast({ title: t("rating-save-failed", { error }), variant: "destructive" })
-    }
-  }
-
-  const handleSaveNote = async () => {
-    if (!skillName) return
-    try {
-      await setRatingFn(skillName, rating, ratingNote)
-      toast({ title: t("rating-saved"), variant: "success" })
-    } catch (error) {
-      toast({ title: t("rating-save-failed", { error }), variant: "destructive" })
     }
   }
 
@@ -462,86 +418,44 @@ const SkillDetailPage = () => {
             <p className="text-xs text-foreground/70 font-mono break-all">{detail.path}</p>
           </div>
 
-          {/* Rating & Note */}
-          <div className="rounded-lg border border-border/50 p-3.5">
-            <div className="flex items-center gap-2 text-muted-foreground mb-2">
-              <StarIcon size={14} />
-              <span className="text-[11px] font-medium uppercase tracking-wide">{t("rating")}</span>
-            </div>
-            <div className="flex items-center gap-1 mb-2.5">
-              {[1, 2, 3, 4, 5].map(i => (
-                <button
-                  key={i}
-                  className="p-0.5 transition-transform hover:scale-110"
-                  onMouseEnter={() => setRatingHover(i)}
-                  onMouseLeave={() => setRatingHover(0)}
-                  onClick={() => handleSaveRating(i === rating ? 0 : i)}
-                >
-                  <StarIcon
-                    size={18}
-                    className={`transition-colors ${
-                      i <= (ratingHover || rating)
-                        ? "text-amber-500 fill-amber-500"
-                        : "text-muted-foreground/30"
-                    }`}
-                  />
-                </button>
-              ))}
-              {rating > 0 && <span className="text-[11px] text-muted-foreground ml-1">{rating}/5</span>}
-            </div>
-            <div className="flex gap-2">
-              <Input
-                className="h-8 text-[12px] flex-1"
-                placeholder={t("rating-note-placeholder")}
-                value={ratingNote}
-                onChange={(e) => setRatingNote(e.target.value)}
-                onBlur={handleSaveNote}
-                onKeyDown={(e) => e.key === "Enter" && handleSaveNote()}
-              />
-            </div>
-          </div>
+          {/* Skill files content - Markdown preview */}
+          {(() => {
+            const activeFileContent = (() => {
+              const mainFile = skillFiles.find(f => !f.isDir && (f.name === "SKILL.md" || f.name.endsWith(".md")))
+              if (mainFile) {
+                return renderMarkdownContent(mainFile.content)
+              }
+              return markdownBody
+            })()
 
-          {/* Skill files content with tabs */}
-          <div className="rounded-lg border border-border/50 overflow-hidden">
-            {skillFiles.length > 1 && (
-              <div className="flex items-center gap-0 bg-muted/30 border-b border-border/50 overflow-x-auto">
-                {skillFiles.map((file) => (
-                  <button
-                    key={file.name}
-                    className={`px-4 py-2 text-[12px] font-medium transition-colors whitespace-nowrap border-b-2 ${
-                      activeFile === file.name
-                        ? "border-primary text-primary bg-background"
-                        : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/50"
-                    }`}
-                    onClick={() => setActiveFile(file.name)}
-                  >
-                    {file.name}
-                    <span className="ml-1.5 text-[10px] text-muted-foreground/50">
-                      {file.size > 1024 ? `${(file.size / 1024).toFixed(1)}KB` : `${file.size}B`}
-                    </span>
-                  </button>
-                ))}
+            return (
+              <div className="rounded-lg border border-border/50 overflow-hidden">
+                <div className="px-3 py-2 bg-muted/30 border-b border-border/50 flex items-center justify-between shrink-0">
+                  <span className="text-[12px] font-medium text-muted-foreground">SKILL.md</span>
+                  <div className="flex items-center gap-1.5">
+                    {skillFiles.filter(f => !f.isDir).length > 1 && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 px-2 text-[11px] text-muted-foreground hover:text-foreground"
+                        onClick={() => navigate(`/skills/files?name=${encodeURIComponent(skillName || "")}`)}
+                      >
+                        <Folder01Icon size={12} className="mr-1" />
+                        {t("browse-files")} ({skillFiles.filter(f => !f.isDir).length})
+                      </Button>
+                    )}
+                    <Button variant="ghost" size="sm" className="h-6 px-2 text-[11px] text-muted-foreground hover:text-foreground shrink-0" onClick={handleOpenEditor}>
+                      <Edit02Icon size={12} className="mr-1" />
+                      {t("edit-skill")}
+                    </Button>
+                  </div>
+                </div>
+                <div className="p-4 prose prose-sm dark:prose-invert max-w-none prose-headings:text-foreground/90 prose-p:text-foreground/75 prose-li:text-foreground/75 prose-code:text-primary prose-code:bg-primary/10 prose-code:rounded prose-code:px-1.5 prose-code:py-0.5 prose-code:text-[12px] prose-pre:bg-muted/50 prose-pre:border prose-pre:border-border/50 prose-a:text-primary prose-a:no-underline hover:prose-a:underline">
+                  <Markdown>{activeFileContent || t("no-description")}</Markdown>
+                </div>
               </div>
-            )}
-            <div className="px-4 py-2.5 bg-muted/30 border-b border-border/50 flex items-center justify-between">
-              <span className="text-[12px] font-medium text-muted-foreground">{activeFile}</span>
-              <Button variant="ghost" size="sm" className="h-6 px-2 text-[11px] text-muted-foreground hover:text-foreground" onClick={handleOpenEditor}>
-                <Edit02Icon size={12} className="mr-1" />
-                {t("edit-skill")}
-              </Button>
-            </div>
-            <div className="p-4 prose prose-sm dark:prose-invert max-w-none prose-headings:text-foreground/90 prose-p:text-foreground/75 prose-li:text-foreground/75 prose-code:text-primary prose-code:bg-primary/10 prose-code:rounded prose-code:px-1.5 prose-code:py-0.5 prose-code:text-[12px] prose-pre:bg-muted/50 prose-pre:border prose-pre:border-border/50 prose-a:text-primary prose-a:no-underline hover:prose-a:underline">
-              <Markdown>{
-                (() => {
-                  const file = skillFiles.find(f => f.name === activeFile)
-                  if (file) {
-                    return renderMarkdownContent(file.content) || t("no-description")
-                  }
-                  return markdownBody || t("no-description")
-                })()
-              }</Markdown>
-            </div>
-          </div>
+            )
+          })()}
         </div>
       </div>
 

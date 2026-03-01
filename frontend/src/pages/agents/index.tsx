@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { useNavigate } from "react-router-dom"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/ui/button"
@@ -55,7 +55,7 @@ const AgentsPage = () => {
   const [allSkills, setAllSkills] = useState<SkillData[]>([])
 
   // Build agent -> skills mapping
-  const agentSkillsMap = useCallback(() => {
+  const agentSkillsMap = useMemo(() => {
     const map: Record<string, SkillData[]> = {}
     for (const skill of allSkills) {
       if (skill.agents) {
@@ -171,8 +171,7 @@ const AgentsPage = () => {
         ) : (
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
             {filteredAgents.map((agent) => {
-              const skillsMap = agentSkillsMap()
-              const agentSkills = skillsMap[agent.name] || []
+              const agentSkills = agentSkillsMap[agent.name] || []
               const isExpanded = expandedAgent === agent.name
               return (
                 <div key={agent.name} className="rounded-md border border-border/50 transition-all duration-150 overflow-hidden">

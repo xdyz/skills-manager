@@ -301,19 +301,23 @@ func (ds *DependencyService) AutoInstallDependencies(skillName string, agents []
 		return fmt.Errorf("cannot install %s due to conflicts: %v", skillName, plan.ConflictingSkills)
 	}
 	
+	// 一次性获取所有已安装 skills，构建 set，避免循环内重复调用 GetAllAgentSkills
+	allSkills, err := ds.skillsService.GetAllAgentSkills()
+	if err != nil {
+		return fmt.Errorf("failed to get installed skills: %w", err)
+	}
+	installedSet := make(map[string]bool, len(allSkills))
+	for _, s := range allSkills {
+		installedSet[s.Name] = true
+	}
+	
 	// 按顺序安装依赖
 	for _, depSkill := range plan.InstallOrder {
 		if depSkill == skillName {
 			continue // 跳过主技能本身
 		}
 		
-		// 检查是否已安装
-		installed, err := ds.isSkillInstalled(depSkill)
-		if err != nil {
-			return fmt.Errorf("failed to check if skill %s is installed: %w", depSkill, err)
-		}
-		
-		if !installed {
+		if !installedSet[depSkill] {
 			// 尝试安装依赖技能
 			err = ds.skillsService.InstallRemoteSkill(depSkill, agents)
 			if err != nil {
@@ -500,22 +504,17 @@ func (ds *DependencyService) detectCircularDependencies(graph *DependencyGraph) 
 func (ds *DependencyService) detectConflicts(graph *DependencyGraph) []ConflictInfo {
 	var conflicts []ConflictInfo
 	
+	// 预构建已安装节点 set，将查找从 O(N) 降为 O(1)
+	installedNodes := make(map[string]bool, len(graph.Nodes))
+	for _, node := range graph.Nodes {
+		if node.Installed {
+			installedNodes[node.ID] = true
+		}
+	}
+	
 	for _, edge := range graph.Edges {
 		if edge.Type == "conflicts" {
-			// 检查两个冲突的技能是否都已安装
-			sourceInstalled := false
-			targetInstalled := false
-			
-			for _, node := range graph.Nodes {
-				if node.ID == edge.Source && node.Installed {
-					sourceInstalled = true
-				}
-				if node.ID == edge.Target && node.Installed {
-					targetInstalled = true
-				}
-			}
-			
-			if sourceInstalled && targetInstalled {
+			if installedNodes[edge.Source] && installedNodes[edge.Target] {
 				conflict := ConflictInfo{
 					SkillA:      edge.Source,
 					SkillB:      edge.Target,

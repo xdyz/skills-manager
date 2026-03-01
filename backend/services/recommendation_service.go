@@ -488,14 +488,22 @@ func (rs *RecommendationService) getUsageBasedRecommendations() ([]EnhancedRecom
 		return nil, err
 	}
 	
+	// 一次性获取所有已安装 skills，构建 set，避免循环内重复调用
+	allSkills, err := rs.skillsService.GetAllAgentSkills()
+	if err != nil {
+		return nil, err
+	}
+	installedSet := make(map[string]bool, len(allSkills))
+	for _, s := range allSkills {
+		installedSet[s.Name] = true
+	}
+	
 	var recommendations []EnhancedRecommendation
 	
 	// 基于使用模式推荐相关技能
 	for _, pattern := range patterns {
 		for _, relatedSkill := range pattern.RelatedSkills {
-			// 检查是否已安装
-			installed, _ := rs.isSkillInstalled(relatedSkill)
-			if installed {
+			if installedSet[relatedSkill] {
 				continue
 			}
 			

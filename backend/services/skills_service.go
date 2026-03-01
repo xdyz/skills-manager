@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -74,10 +75,17 @@ type SkillLockEntry struct {
 	UpdatedAt   string `json:"updatedAt"`
 }
 
+// ---- 预编译正则表达式 ----
+var (
+	reTrailingComma = regexp.MustCompile(`,(\s*[}\]])`)
+	reANSI          = regexp.MustCompile(`\x1b\[[0-9;]*m`)
+	reSkillName     = regexp.MustCompile(`([a-zA-Z0-9_-]+)/([a-zA-Z0-9_-]+)@([a-zA-Z0-9_:-]+)`)
+	reSkillURL      = regexp.MustCompile(`└\s*(https://skills\.sh/[^\s]+)`)
+)
+
 // sanitizeJSON removes trailing commas to handle malformed JSON (e.g. from external tools)
 func sanitizeJSON(data []byte) []byte {
-	re := regexp.MustCompile(`,(\s*[}\]])`)
-	return re.ReplaceAll(data, []byte("$1"))
+	return reTrailingComma.ReplaceAll(data, []byte("$1"))
 }
 
 // unmarshalSkillsLock safely parses .skills-lock with trailing comma tolerance
@@ -358,15 +366,38 @@ func (ss *SkillsService) GetSkillDetail(skillName string) (*SkillDetail, error) 
 
 // BatchDeleteSkills 批量删除多个 skills
 func (ss *SkillsService) BatchDeleteSkills(skillNames []string) (int, error) {
+	if len(skillNames) == 0 {
+		return 0, nil
+	}
+
+	// 并行删除，限制并发数为 5
+	const maxConcurrency = 5
+	sem := make(chan struct{}, maxConcurrency)
+	var wg sync.WaitGroup
+	var mu sync.Mutex
 	successCount := 0
 	var lastErr error
+
 	for _, name := range skillNames {
-		if err := ss.DeleteSkill(name); err != nil {
-			lastErr = err
-		} else {
-			successCount++
-		}
+		wg.Add(1)
+		sem <- struct{}{} // 获取信号量
+		go func(skillName string) {
+			defer wg.Done()
+			defer func() { <-sem }() // 释放信号量
+
+			if err := ss.DeleteSkill(skillName); err != nil {
+				mu.Lock()
+				lastErr = err
+				mu.Unlock()
+			} else {
+				mu.Lock()
+				successCount++
+				mu.Unlock()
+			}
+		}(name)
 	}
+	wg.Wait()
+
 	if successCount == 0 && lastErr != nil {
 		return 0, lastErr
 	}
@@ -712,16 +743,8 @@ func parseRemoteSkillsOutput(output string) []RemoteSkill {
 	var skills []RemoteSkill
 
 	// 移除 ANSI 转义序列
-	ansiRegex := regexp.MustCompile(`\x1b\[[0-9;]*m`)
-	cleanOutput := ansiRegex.ReplaceAllString(output, "")
+	cleanOutput := reANSI.ReplaceAllString(output, "")
 
-
-	// 正则匹配格式：owner/repo@skill-name
-	// 例如：vercel-labs/agent-skills@vercel-react-best-practices
-	nameRegex := regexp.MustCompile(`([a-zA-Z0-9_-]+)/([a-zA-Z0-9_-]+)@([a-zA-Z0-9_:-]+)`)
-	// 正则匹配 URL
-	// 例如：└ https://skills.sh/vercel-labs/agent-skills/vercel-react-best-practices
-	urlRegex := regexp.MustCompile(`└\s*(https://skills\.sh/[^\s]+)`)
 
 	lines := strings.Split(cleanOutput, "\n")
 	var currentSkill *RemoteSkill
@@ -735,7 +758,7 @@ func parseRemoteSkillsOutput(output string) []RemoteSkill {
 		}
 
 		// 匹配 skill 名称行
-		if matches := nameRegex.FindStringSubmatch(line); len(matches) == 4 {
+		if matches := reSkillName.FindStringSubmatch(line); len(matches) == 4 {
 			if currentSkill != nil {
 				// 保存之前的 skill
 				skills = append(skills, *currentSkill)
@@ -749,7 +772,7 @@ func parseRemoteSkillsOutput(output string) []RemoteSkill {
 			}
 		} else if currentSkill != nil && strings.Contains(line, "└") {
 			// 匹配 URL 行
-			if matches := urlRegex.FindStringSubmatch(line); len(matches) == 2 {
+			if matches := reSkillURL.FindStringSubmatch(line); len(matches) == 2 {
 				currentSkill.URL = matches[1]
 			}
 		} else if currentSkill != nil && line != "" && !strings.Contains(line, "└") {
@@ -1775,7 +1798,7 @@ type ExportedSkill struct {
 
 // ExportConfig 导出当前所有配置（已安装 skills + agent 链接 + 自定义 agents）
 func (ss *SkillsService) ExportConfig() (*ExportedConfig, error) {
-	homeDir, err := os.UserHomeDir()
+	homeDir, err := getCachedHomeDir()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get home directory: %v", err)
 	}
@@ -1789,16 +1812,21 @@ func (ss *SkillsService) ExportConfig() (*ExportedConfig, error) {
 		lock, _ = unmarshalSkillsLock(data)
 	}
 
+	// 一次性获取所有 skills 及其 agent 链接信息，避免逐个调用 GetSkillAgentLinks
+	allSkills, _ := ss.GetAllAgentSkills()
+	skillAgentsMap := make(map[string][]string, len(allSkills))
+	for _, skill := range allSkills {
+		skillAgentsMap[skill.Name] = skill.Agents
+	}
+
 	// 收集所有 skill 信息
 	var exportedSkills []ExportedSkill
 	if lock.Skills != nil {
 		for skillName, entry := range lock.Skills {
 			fullName := fmt.Sprintf("%s@%s", entry.Source, skillName)
-			// 获取链接的 agents
-			agents, _ := ss.GetSkillAgentLinks(skillName)
 			exportedSkills = append(exportedSkills, ExportedSkill{
 				FullName:     fullName,
-				LinkedAgents: agents,
+				LinkedAgents: skillAgentsMap[skillName],
 			})
 		}
 	}
@@ -2207,8 +2235,11 @@ func (ss *SkillsService) GetDashboardStats() (*DashboardStats, error) {
 
 	// 统计链接数和 agent 排名
 	agentCounts := make(map[string]int)
+	// 同时构建 skillLinkCount 用于计算 orphan skills，避免重复调用 HealthCheck
+	skillLinkCount := make(map[string]int)
 	for _, skill := range skills {
 		stats.TotalLinks += len(skill.Agents)
+		skillLinkCount[skill.Name] = len(skill.Agents)
 		for _, agent := range skill.Agents {
 			agentCounts[agent]++
 		}
@@ -2218,14 +2249,9 @@ func (ss *SkillsService) GetDashboardStats() (*DashboardStats, error) {
 	for name, count := range agentCounts {
 		stats.TopAgents = append(stats.TopAgents, AgentLinkCount{Name: name, Count: count})
 	}
-	// 排序
-	for i := 0; i < len(stats.TopAgents); i++ {
-		for j := i + 1; j < len(stats.TopAgents); j++ {
-			if stats.TopAgents[j].Count > stats.TopAgents[i].Count {
-				stats.TopAgents[i], stats.TopAgents[j] = stats.TopAgents[j], stats.TopAgents[i]
-			}
-		}
-	}
+	sort.Slice(stats.TopAgents, func(i, j int) bool {
+		return stats.TopAgents[i].Count > stats.TopAgents[j].Count
+	})
 	if len(stats.TopAgents) > 5 {
 		stats.TopAgents = stats.TopAgents[:5]
 	}
@@ -2238,19 +2264,15 @@ func (ss *SkillsService) GetDashboardStats() (*DashboardStats, error) {
 			Source:     skill.Source,
 		})
 	}
-	for i := 0; i < len(stats.MostLinkedSkills); i++ {
-		for j := i + 1; j < len(stats.MostLinkedSkills); j++ {
-			if stats.MostLinkedSkills[j].AgentCount > stats.MostLinkedSkills[i].AgentCount {
-				stats.MostLinkedSkills[i], stats.MostLinkedSkills[j] = stats.MostLinkedSkills[j], stats.MostLinkedSkills[i]
-			}
-		}
-	}
+	sort.Slice(stats.MostLinkedSkills, func(i, j int) bool {
+		return stats.MostLinkedSkills[i].AgentCount > stats.MostLinkedSkills[j].AgentCount
+	})
 	if len(stats.MostLinkedSkills) > 5 {
 		stats.MostLinkedSkills = stats.MostLinkedSkills[:5]
 	}
 
 	// Recent skills (from .skills-lock)
-	homeDir, _ := os.UserHomeDir()
+	homeDir, _ := getCachedHomeDir()
 	lockPath := filepath.Join(homeDir, ".agents", "skills", ".skills-lock")
 	if data, err := os.ReadFile(lockPath); err == nil {
 		if lock, err := unmarshalSkillsLock(data); err == nil {
@@ -2267,14 +2289,9 @@ func (ss *SkillsService) GetDashboardStats() (*DashboardStats, error) {
 				}
 				entries = append(entries, timeEntry{name: name, time: t, src: entry.Source})
 			}
-			// 按时间降序
-			for i := 0; i < len(entries); i++ {
-				for j := i + 1; j < len(entries); j++ {
-					if entries[j].time > entries[i].time {
-						entries[i], entries[j] = entries[j], entries[i]
-					}
-				}
-			}
+			sort.Slice(entries, func(i, j int) bool {
+				return entries[i].time > entries[j].time
+			})
 			if len(entries) > 5 {
 				entries = entries[:5]
 			}
@@ -2288,10 +2305,18 @@ func (ss *SkillsService) GetDashboardStats() (*DashboardStats, error) {
 		}
 	}
 
-	// Orphan skills count
-	healthResult, _ := ss.HealthCheck()
-	if healthResult != nil {
-		stats.OrphanSkills = len(healthResult.OrphanSkills)
+	// Orphan skills count: 中央目录中没有被任何 agent 链接的 skills
+	centralSkillsDir := filepath.Join(homeDir, ".agents", "skills")
+	if entries, err := os.ReadDir(centralSkillsDir); err == nil {
+		for _, entry := range entries {
+			name := entry.Name()
+			if strings.HasPrefix(name, ".") || !entry.IsDir() {
+				continue
+			}
+			if skillLinkCount[name] == 0 {
+				stats.OrphanSkills++
+			}
+		}
 	}
 
 	// Tag distribution
@@ -2678,7 +2703,7 @@ func (ss *SkillsService) OpenSkillInSystemEditor(skillName string) error {
 
 // GetSkillFiles 获取 skill 目录下的所有文件列表
 func (ss *SkillsService) GetSkillFiles(skillName string) ([]SkillFile, error) {
-	homeDir, err := os.UserHomeDir()
+	homeDir, err := getCachedHomeDir()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get home directory: %v", err)
 	}
@@ -2687,6 +2712,8 @@ func (ss *SkillsService) GetSkillFiles(skillName string) ([]SkillFile, error) {
 	if _, err := os.Stat(skillDir); os.IsNotExist(err) {
 		return nil, fmt.Errorf("skill not found: %s", skillName)
 	}
+
+	const maxFileReadSize int64 = 1 << 20 // 1MB 限制，超出则跳过内容读取
 
 	var files []SkillFile
 	err = filepath.Walk(skillDir, func(path string, info os.FileInfo, err error) error {
@@ -2702,7 +2729,7 @@ func (ss *SkillsService) GetSkillFiles(skillName string) ([]SkillFile, error) {
 			IsDir: info.IsDir(),
 			Size:  info.Size(),
 		}
-		if !info.IsDir() {
+		if !info.IsDir() && info.Size() <= maxFileReadSize {
 			if data, err := os.ReadFile(path); err == nil {
 				sf.Content = string(data)
 			}

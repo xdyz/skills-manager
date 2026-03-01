@@ -1,3 +1,4 @@
+import React from "react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/ui/button"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
@@ -84,4 +85,4 @@ const NotificationCenter = ({ notifications, onDismiss, onClearAll }: Notificati
   )
 }
 
-export default NotificationCenter
+export default React.memo(NotificationCenter)

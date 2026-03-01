@@ -9,7 +9,35 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
+)
+
+// ---- 包级缓存与复用 ----
+
+// sharedHTTPClient 复用连接池，避免每次请求创建新 Client
+var sharedHTTPClient = &http.Client{Timeout: 15 * time.Second}
+
+// homeDir 缓存，避免重复系统调用
+var (
+	cachedHomeDir string
+	homeDirOnce   sync.Once
+	homeDirErr    error
+)
+
+// getCachedHomeDir 返回缓存的 home 目录路径
+func getCachedHomeDir() (string, error) {
+	homeDirOnce.Do(func() {
+		cachedHomeDir, homeDirErr = os.UserHomeDir()
+	})
+	return cachedHomeDir, homeDirErr
+}
+
+// customAgents 缓存，避免每次调用都读磁盘 + JSON 解析
+var (
+	customAgentsMu      sync.RWMutex
+	cachedCustomAgents  []CustomAgentConfig
+	customAgentsCached  bool
 )
 
 // AgentService 负责 Agent 相关的所有操作
@@ -111,7 +139,7 @@ func init() {
 
 // getConfigDir 获取 skills-manager 配置目录
 func getConfigDir() (string, error) {
-	homeDir, err := os.UserHomeDir()
+	homeDir, err := getCachedHomeDir()
 	if err != nil {
 		return "", err
 	}
@@ -174,6 +202,17 @@ func saveAgentsToFile(agents []AgentConfig) error {
 // ---- 自定义 Agent 持久化 ----
 
 func loadCustomAgents() ([]CustomAgentConfig, error) {
+	// 优先返回缓存
+	customAgentsMu.RLock()
+	if customAgentsCached {
+		result := make([]CustomAgentConfig, len(cachedCustomAgents))
+		copy(result, cachedCustomAgents)
+		customAgentsMu.RUnlock()
+		return result, nil
+	}
+	customAgentsMu.RUnlock()
+
+	// 缓存未命中，读磁盘
 	filePath, err := getCustomAgentsFilePath()
 	if err != nil {
 		return nil, err
@@ -181,6 +220,11 @@ func loadCustomAgents() ([]CustomAgentConfig, error) {
 	data, err := os.ReadFile(filePath)
 	if err != nil {
 		if os.IsNotExist(err) {
+			// 缓存空结果
+			customAgentsMu.Lock()
+			cachedCustomAgents = []CustomAgentConfig{}
+			customAgentsCached = true
+			customAgentsMu.Unlock()
 			return []CustomAgentConfig{}, nil
 		}
 		return nil, err
@@ -189,7 +233,16 @@ func loadCustomAgents() ([]CustomAgentConfig, error) {
 	if err := json.Unmarshal(data, &agents); err != nil {
 		return []CustomAgentConfig{}, nil
 	}
-	return agents, nil
+
+	// 写入缓存
+	customAgentsMu.Lock()
+	cachedCustomAgents = agents
+	customAgentsCached = true
+	customAgentsMu.Unlock()
+
+	result := make([]CustomAgentConfig, len(agents))
+	copy(result, agents)
+	return result, nil
 }
 
 func saveCustomAgents(agents []CustomAgentConfig) error {
@@ -201,7 +254,20 @@ func saveCustomAgents(agents []CustomAgentConfig) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filePath, data, 0644)
+	if err := os.WriteFile(filePath, data, 0644); err != nil {
+		return err
+	}
+	// invalidate 缓存
+	invalidateCustomAgentsCache()
+	return nil
+}
+
+// invalidateCustomAgentsCache 使自定义 agent 缓存失效
+func invalidateCustomAgentsCache() {
+	customAgentsMu.Lock()
+	cachedCustomAgents = nil
+	customAgentsCached = false
+	customAgentsMu.Unlock()
 }
 
 // ---- 包级辅助函数 ----
@@ -221,8 +287,7 @@ func getAllAgentConfigs() []AgentConfig {
 
 // httpGet 发送 HTTP GET 请求并返回响应体
 func httpGet(url string) ([]byte, error) {
-	client := &http.Client{Timeout: 15 * time.Second}
-	resp, err := client.Get(url)
+	resp, err := sharedHTTPClient.Get(url)
 	if err != nil {
 		return nil, err
 	}
@@ -280,7 +345,7 @@ func (as *AgentService) EnableProjectAgent(projectPath string, agentName string)
 
 // syncSkillsToAgent 将项目中其他 agent 已有的 skills 同步到目标 agent
 func (as *AgentService) syncSkillsToAgent(projectPath string, targetAgent *AgentConfig, allConfigs []AgentConfig) {
-	homeDir, _ := os.UserHomeDir()
+	homeDir, _ := getCachedHomeDir()
 	centralSkillsDir := filepath.Join(homeDir, ".agents", "skills")
 	targetSkillsDir := filepath.Join(projectPath, targetAgent.LocalPath)
 

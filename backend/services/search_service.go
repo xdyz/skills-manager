@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -16,6 +17,7 @@ type SearchService struct {
 	ctx           context.Context
 	skillsService *SkillsService
 	searchIndex   *SearchIndex
+	indexMu       sync.RWMutex // 保护 searchIndex 的并发读写
 }
 
 // SearchIndex 搜索索引
@@ -152,6 +154,8 @@ func (ss *SearchService) Search(query SearchQuery) (*SearchResult, error) {
 		query.SortOrder = "desc"
 	}
 	
+	ss.indexMu.RLock()
+	
 	// 执行搜索
 	var candidates []SearchResultItem
 	
@@ -165,6 +169,12 @@ func (ss *SearchService) Search(query SearchQuery) (*SearchResult, error) {
 	
 	// 应用过滤器
 	candidates = ss.applyFilters(candidates, query)
+	
+	// 生成建议和分面
+	suggestions := ss.generateSuggestions(query.Query)
+	facets := ss.generateFacets(candidates)
+	
+	ss.indexMu.RUnlock()
 	
 	// 排序
 	ss.sortResults(candidates, query.SortBy, query.SortOrder)
@@ -182,10 +192,6 @@ func (ss *SearchService) Search(query SearchQuery) (*SearchResult, error) {
 	}
 	
 	pagedResults := candidates[start:end]
-	
-	// 生成建议和分面
-	suggestions := ss.generateSuggestions(query.Query)
-	facets := ss.generateFacets(candidates)
 	
 	result := &SearchResult{
 		Skills:      pagedResults,
@@ -207,6 +213,9 @@ func (ss *SearchService) GetSearchSuggestions(prefix string, limit int) ([]Searc
 	if limit <= 0 {
 		limit = 10
 	}
+	
+	ss.indexMu.RLock()
+	defer ss.indexMu.RUnlock()
 	
 	var suggestions []SearchSuggestion
 	prefix = strings.ToLower(prefix)
@@ -274,7 +283,7 @@ func (ss *SearchService) GetSearchSuggestions(prefix string, limit int) ([]Searc
 
 // GetSearchHistory 获取搜索历史
 func (ss *SearchService) GetSearchHistory(limit int) ([]SearchHistory, error) {
-	homeDir, err := os.UserHomeDir()
+	homeDir, err := getCachedHomeDir()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get home directory: %w", err)
 	}
@@ -310,7 +319,7 @@ func (ss *SearchService) GetSearchHistory(limit int) ([]SearchHistory, error) {
 
 // ClearSearchHistory 清空搜索历史
 func (ss *SearchService) ClearSearchHistory() error {
-	homeDir, err := os.UserHomeDir()
+	homeDir, err := getCachedHomeDir()
 	if err != nil {
 		return fmt.Errorf("failed to get home directory: %w", err)
 	}
@@ -329,12 +338,12 @@ func (ss *SearchService) RebuildIndex() error {
 	return ss.rebuildIndex()
 }
 
-// rebuildIndex 重建索引
+// rebuildIndex 重建索引（先构建新索引，再原子替换，避免数据竞争）
 func (ss *SearchService) rebuildIndex() error {
 	fmt.Println("Rebuilding search index...")
 	
-	// 重置索引
-	ss.searchIndex = &SearchIndex{
+	// 在临时变量上构建新索引，不持有锁
+	newIndex := &SearchIndex{
 		Skills:    make(map[string]*IndexedSkill),
 		Tags:      make(map[string][]string),
 		Languages: make(map[string][]string),
@@ -343,8 +352,18 @@ func (ss *SearchService) rebuildIndex() error {
 		UpdatedAt: time.Now(),
 	}
 	
+	// 暂存旧索引引用，用新索引临时替换以复用 indexLocalSkills/indexRemoteSkills
+	ss.indexMu.Lock()
+	oldIndex := ss.searchIndex
+	ss.searchIndex = newIndex
+	ss.indexMu.Unlock()
+	
 	// 索引本地技能
 	if err := ss.indexLocalSkills(); err != nil {
+		// 回滚
+		ss.indexMu.Lock()
+		ss.searchIndex = oldIndex
+		ss.indexMu.Unlock()
 		return fmt.Errorf("failed to index local skills: %w", err)
 	}
 	
@@ -837,7 +856,7 @@ func (ss *SearchService) recordSearchHistory(query string, results int) {
 		return
 	}
 	
-	homeDir, err := os.UserHomeDir()
+	homeDir, err := getCachedHomeDir()
 	if err != nil {
 		return
 	}
@@ -886,7 +905,7 @@ func (ss *SearchService) recordSearchHistory(query string, results int) {
 
 // loadSearchIndex 加载搜索索引
 func (ss *SearchService) loadSearchIndex() error {
-	homeDir, err := os.UserHomeDir()
+	homeDir, err := getCachedHomeDir()
 	if err != nil {
 		return fmt.Errorf("failed to get home directory: %w", err)
 	}
@@ -911,7 +930,7 @@ func (ss *SearchService) loadSearchIndex() error {
 
 // saveSearchIndex 保存搜索索引
 func (ss *SearchService) saveSearchIndex() error {
-	homeDir, err := os.UserHomeDir()
+	homeDir, err := getCachedHomeDir()
 	if err != nil {
 		return fmt.Errorf("failed to get home directory: %w", err)
 	}

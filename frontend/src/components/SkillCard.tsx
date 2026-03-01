@@ -1,3 +1,4 @@
+import React from "react"
 import { useTranslation } from "react-i18next"
 import { useNavigate } from "react-router-dom"
 import { Card, CardContent, CardFooter, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
@@ -212,4 +213,4 @@ const SkillCard = ({
   )
 }
 
-export default SkillCard
+export default React.memo(SkillCard)

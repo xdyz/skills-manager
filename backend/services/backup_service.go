@@ -85,7 +85,7 @@ func NewBackupService() *BackupService {
 func (bs *BackupService) Startup(ctx context.Context) {
 	bs.ctx = ctx
 	
-	// 启动自动备份任务
+	// 启动自动备份任务（ctx 已赋值后启动 goroutine）
 	go bs.startAutoBackup()
 }
 

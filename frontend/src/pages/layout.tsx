@@ -189,7 +189,7 @@ const PageLayout = () => {
     }
   }
 
-  const handleAddFolder = async () => {
+  const handleAddFolder = useCallback(async () => {
     try {
       const folder = await SelectFolder()
       if (folder) {
@@ -200,19 +200,19 @@ const PageLayout = () => {
     } catch (error) {
       console.error("Failed to select folder:", error)
     }
-  }
+  }, [navigate])
 
-  const handleSelectFolder = (folder: string) => {
+  const handleSelectFolder = useCallback((folder: string) => {
     setSelectedFolder(folder)
     navigate(`/projects?path=${encodeURIComponent(folder)}`)
-  }
+  }, [navigate])
 
-  const handleRemoveFolder = (folder: string, e: React.MouseEvent) => {
+  const handleRemoveFolder = useCallback((folder: string, e: React.MouseEvent) => {
     e.stopPropagation()
     setFolderToRemove(folder)
-  }
+  }, [])
 
-  const confirmRemoveFolder = async () => {
+  const confirmRemoveFolder = useCallback(async () => {
     if (!folderToRemove) return
     try {
       await RemoveFolder(folderToRemove)
@@ -226,7 +226,7 @@ const PageLayout = () => {
     } finally {
       setFolderToRemove(null)
     }
-  }
+  }, [selectedFolder, navigate])
 
   // Listen for system theme changes when in "system" mode
   useEffect(() => {
@@ -239,7 +239,7 @@ const PageLayout = () => {
     return () => mq.removeEventListener("change", handler)
   }, [theme])
 
-  const toggleTheme = async () => {
+  const toggleTheme = useCallback(async () => {
     const cycle: Array<"light" | "dark" | "system"> = ["light", "dark", "system"]
     const nextIdx = (cycle.indexOf(theme) + 1) % cycle.length
     const newTheme = cycle[nextIdx]
@@ -251,9 +251,9 @@ const PageLayout = () => {
       const s = await GetSettings()
       if (s) await SaveSettings(JSON.stringify({ ...s, theme: newTheme }))
     } catch {}
-  }
+  }, [theme])
 
-  const toggleLanguage = async () => {
+  const toggleLanguage = useCallback(async () => {
     const newLng = i18n.language === "zh" ? "en" : "zh"
     i18n.changeLanguage(newLng)
     // 同步保存到后端设置
@@ -261,7 +261,7 @@ const PageLayout = () => {
       const s = await GetSettings()
       if (s) await SaveSettings(JSON.stringify({ ...s, language: newLng }))
     } catch {}
-  }
+  }, [i18n])
 
   const toggleAutoUpdate = useCallback(async () => {
     const newEnabled = !autoUpdateEnabled
@@ -346,14 +346,14 @@ const PageLayout = () => {
     }
   }, [t])
 
-  const isActive = (path: string) => {
+  const isActive = useCallback((path: string) => {
     if (path === "/skills") return location.pathname === "/skills" || location.pathname.startsWith("/skills/")
     return location.pathname === path || (path === "/home" && location.pathname === "/")
-  }
+  }, [location.pathname])
 
-  const getFolderName = (path: string) => {
+  const getFolderName = useCallback((path: string) => {
     return path.split('/').filter(Boolean).pop() || path
-  }
+  }, [])
 
   return (
     <div className="flex flex-col w-screen h-screen bg-background">

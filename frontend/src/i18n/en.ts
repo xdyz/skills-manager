@@ -215,6 +215,10 @@ const en = {
     "detail-installed-at": "Installed At",
     "detail-updated-at": "Updated At",
     "detail-path": "Local Path",
+    "files": "Files",
+    "toggle-file-tree": "Toggle File Tree",
+    "browse-files": "Browse Files",
+    "back": "Back",
     "toast-load-detail-failed": "Failed to load skill detail: {{error}}",
 
     // Import/Export

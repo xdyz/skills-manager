@@ -644,8 +644,7 @@ func containsTag(tags []string, tag string) bool {
 
 // templateHttpGet 发送 HTTP GET 请求
 func templateHttpGet(url string) ([]byte, error) {
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Get(url)
+	resp, err := sharedHTTPClient.Get(url)
 	if err != nil {
 		return nil, err
 	}

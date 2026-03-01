@@ -475,7 +475,7 @@ func (ms *MonitoringService) loadMetrics() error {
 
 // saveMetrics 保存指标数据
 func (ms *MonitoringService) saveMetrics() error {
-	homeDir, err := os.UserHomeDir()
+	homeDir, err := getCachedHomeDir()
 	if err != nil {
 		return fmt.Errorf("failed to get home directory: %w", err)
 	}
@@ -487,10 +487,16 @@ func (ms *MonitoringService) saveMetrics() error {
 	
 	metricsFile := filepath.Join(configDir, "performance-metrics.json")
 	
+	// 在 RLock 内复制数据，RLock 外执行 JSON marshal 和写磁盘
 	ms.mutex.RLock()
-	data, err := json.MarshalIndent(ms.metrics, "", "  ")
+	metricsCopy := make(map[string]*PerformanceMetric, len(ms.metrics))
+	for k, v := range ms.metrics {
+		copied := *v
+		metricsCopy[k] = &copied
+	}
 	ms.mutex.RUnlock()
 	
+	data, err := json.MarshalIndent(metricsCopy, "", "  ")
 	if err != nil {
 		return fmt.Errorf("failed to marshal metrics: %w", err)
 	}

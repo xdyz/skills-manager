@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react"
+import React, { useState, useEffect, useMemo } from "react"
 import { useNavigate } from "react-router-dom"
 import { useTranslation } from "react-i18next"
 import {
@@ -185,4 +185,4 @@ const CommandPalette = ({ open, onOpenChange, onAction }: CommandPaletteProps) =
   )
 }
 
-export default CommandPalette
+export default React.memo(CommandPalette)

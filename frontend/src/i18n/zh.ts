@@ -215,6 +215,10 @@ const zh = {
     "detail-installed-at": "安装时间",
     "detail-updated-at": "更新时间",
     "detail-path": "本地路径",
+    "files": "文件",
+    "toggle-file-tree": "切换文件树",
+    "browse-files": "浏览文件",
+    "back": "返回",
     "toast-load-detail-failed": "加载技能详情失败: {{error}}",
 
     // Import/Export
